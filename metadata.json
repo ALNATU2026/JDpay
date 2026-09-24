@@ -1,0 +1,6 @@
+{
+  "name": "JDpay - Nigerian Cable TV Payment Platform",
+  "description": "Fast, secure, and simple cable TV subscription payments for DStv, GOtv, and StarTimes with instant wallet funding and digital receipts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
