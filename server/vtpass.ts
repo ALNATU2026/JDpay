@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 const VTPASS_EMAIL = process.env.VTPASS_EMAIL || 'sadjad578@gmail.com';
-// Ensure the verified VTpass password 'Jalloh99@' is used even if stale 'Jalloh98@' exists in environment
 const rawPassword = process.env.VTPASS_PASSWORD || 'Jalloh99@';
 const VTPASS_PASSWORD = rawPassword === 'Jalloh98@' ? 'Jalloh99@' : rawPassword;
 const VTPASS_BASE_URL = (process.env.VTPASS_BASE_URL || 'https://vtpass.com/api').replace(/\/+$/, '');
@@ -66,10 +65,11 @@ export function generateVtpassRequestId(): string {
 }
 
 /**
- * Fetch official variations (bouquets) for DStv from VTpass
+ * Fetch official variations (bouquets) for Startimes, DStv, or GOtv from VTpass
  */
 export async function fetchVtpassVariations(serviceID: string = 'dstv'): Promise<VtpassVariation[]> {
-  const url = `${VTPASS_BASE_URL}/service-variations?serviceID=${encodeURIComponent(serviceID)}`;
+  const cleanId = serviceID.toLowerCase();
+  const url = `${VTPASS_BASE_URL}/service-variations?serviceID=${encodeURIComponent(cleanId)}`;
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -95,12 +95,14 @@ export async function fetchVtpassVariations(serviceID: string = 'dstv'): Promise
 
 /**
  * Verify Smartcard / IUC Number with VTpass Merchant Verify API
+ * Supports StarTimes, DStv, and GOtv
  */
 export async function verifySmartcardWithVtpass(
   billersCode: string,
   serviceID: string = 'dstv'
 ): Promise<VtpassVerifyResult> {
   const cleanCode = billersCode.replace(/\s+/g, '').trim();
+  const cleanService = serviceID.toLowerCase();
   const url = `${VTPASS_BASE_URL}/merchant-verify`;
 
   try {
@@ -112,12 +114,12 @@ export async function verifySmartcardWithVtpass(
       },
       body: JSON.stringify({
         billersCode: cleanCode,
-        serviceID: serviceID.toLowerCase(),
+        serviceID: cleanService,
       }),
     });
 
     const data = (await res.json()) as any;
-    console.log(`[VTpass Verify] ${serviceID} ${cleanCode} ->`, JSON.stringify(data));
+    console.log(`[VTpass Verify] ${cleanService} ${cleanCode} ->`, JSON.stringify(data));
 
     const code = String(data?.code || '');
     const content = data?.content;
@@ -132,19 +134,27 @@ export async function verifySmartcardWithVtpass(
         content.Customer_ID;
 
       if (customerName && !content.error && !content.WrongBillersCode) {
+        // Renewal amount mapping: for StarTimes it might be in content.Balance or content.Renewal_Amount
+        let renewalAmt: number | undefined = undefined;
+        if (content.Renewal_Amount !== undefined && !isNaN(Number(content.Renewal_Amount))) {
+          renewalAmt = Number(content.Renewal_Amount);
+        } else if (content.Balance !== undefined && !isNaN(Number(content.Balance)) && Number(content.Balance) > 0) {
+          renewalAmt = Number(content.Balance);
+        }
+
         return {
           customerName: String(customerName).trim(),
-          status: content.Status || content.status || 'ACTIVE',
+          status: content.Status || content.status || 'Active',
           dueDate: content.Due_Date || content.due_date || content.Expiry_Date,
-          customerNumber: content.Customer_Number || content.customer_number,
-          customerType: content.Customer_Type || content.customer_type || serviceID.toUpperCase(),
-          currentBouquet: content.Current_Bouquet || content.current_bouquet,
-          renewalAmount: content.Renewal_Amount ? Number(content.Renewal_Amount) : undefined,
+          customerNumber: content.Customer_Number || content.customer_number || content.Customer_ID,
+          customerType: content.Customer_Type || content.customer_type || cleanService.toUpperCase(),
+          currentBouquet: content.Current_Bouquet || content.current_bouquet || (cleanService === 'startimes' ? 'StarTimes Basic (Dish)' : undefined),
+          renewalAmount: renewalAmt,
           rawResponse: data,
         };
       }
 
-      // Check if known test / sandbox card was entered (e.g. 1212121212)
+      // Check if known test / sandbox card was entered
       const isKnownTestNumber = [
         '1212121212',
         '1111111111',
@@ -153,17 +163,33 @@ export async function verifySmartcardWithVtpass(
         '2012345678',
         '41234567890',
         '7024567890',
+        '0213456789',
+        '0219876543',
+        '0181234567',
       ].includes(cleanCode);
 
       if (isKnownTestNumber) {
+        const defaultBouquet =
+          cleanService === 'startimes'
+            ? 'StarTimes Basic (Dish)'
+            : cleanService === 'gotv'
+            ? 'GOtv Max'
+            : 'DStv Compact';
+        const defaultRenewal =
+          cleanService === 'startimes'
+            ? 5100
+            : cleanService === 'gotv'
+            ? 8500
+            : 19000;
+
         return {
-          customerName: 'SANDBOX TEST DECODER',
-          status: 'ACTIVE',
+          customerName: 'SANDBOX TEST SUBSCRIBER',
+          status: 'Active',
           dueDate: new Date(Date.now() + 28 * 24 * 3600 * 1000).toISOString(),
-          customerNumber: '8061522780',
-          customerType: serviceID.toUpperCase(),
-          currentBouquet: serviceID.toLowerCase() === 'gotv' ? 'GOtv Max' : 'DStv Compact',
-          renewalAmount: serviceID.toLowerCase() === 'gotv' ? 7200 : 19000,
+          customerNumber: `080${cleanCode.slice(-8)}`,
+          customerType: cleanService.toUpperCase(),
+          currentBouquet: defaultBouquet,
+          renewalAmount: defaultRenewal,
           rawResponse: { simulated: true, original: data },
         };
       }
@@ -171,7 +197,7 @@ export async function verifySmartcardWithVtpass(
       if (content.error || content.WrongBillersCode) {
         throw new Error(
           content.error ||
-            `Smartcard number ${cleanCode} was not recognized by MultiChoice switch. Please double-check your smartcard number or use test sandbox card 1212121212.`
+            `${cleanService.toUpperCase()} smartcard number ${cleanCode} was not recognized by broadcaster switch. Please check your number or use sandbox test number 1212121212.`
         );
       }
     }
@@ -185,15 +211,15 @@ export async function verifySmartcardWithVtpass(
 
     throw new Error(errDesc);
   } catch (error: any) {
-    console.error(`[VTpass] Smartcard verification error (${billersCode}):`, error.message);
+    console.error(`[VTpass] Smartcard verification error (${cleanService} - ${billersCode}):`, error.message);
     throw error;
   }
 }
 
 /**
- * Purchase / Renew DStv Subscription via VTpass Live /api/pay
+ * Purchase / Renew Cable TV Subscription (DStv, StarTimes, GOtv) via VTpass Live /api/pay
  */
-export async function purchaseDstvSubscription(
+export async function purchaseCableSubscription(
   params: VtpassPurchaseParams
 ): Promise<VtpassPurchaseResult> {
   const {
@@ -209,28 +235,43 @@ export async function purchaseDstvSubscription(
   const requestId = generateVtpassRequestId();
   const cleanCode = billersCode.replace(/\s+/g, '');
   const cleanPhone = phone.replace(/\s+/g, '') || '08012345678';
+  const cleanService = serviceID.toLowerCase();
 
   const payload: any = {
     request_id: requestId,
-    serviceID: serviceID.toLowerCase(),
+    serviceID: cleanService,
     billersCode: cleanCode,
     phone: cleanPhone,
-    subscription_type: subscriptionType,
   };
 
   if (amount) {
     payload.amount = amount;
   }
 
-  if (subscriptionType === 'change') {
-    if (!variationCode) {
-      throw new Error('Variation code is required for DSTV bouquet purchase or change.');
-    }
+  if (variationCode) {
     payload.variation_code = variationCode;
+  }
+
+  // MultiChoice parameters vs StarTimes parameters
+  if (cleanService === 'dstv' || cleanService === 'gotv') {
+    payload.subscription_type = subscriptionType || 'change';
     payload.quantity = quantity || 1;
+    if (payload.subscription_type === 'change' && !variationCode) {
+      throw new Error(`Variation code is required for ${cleanService.toUpperCase()} bouquet purchase.`);
+    }
+  } else if (cleanService === 'startimes') {
+    // VTpass Startimes subscription payment parameters
+    if (subscriptionType) {
+      payload.subscription_type = subscriptionType;
+    }
+    payload.quantity = quantity || 1;
+    if (!variationCode) {
+      throw new Error('Variation code is required for StarTimes bouquet purchase.');
+    }
   }
 
   const url = `${VTPASS_BASE_URL}/pay`;
+  console.log(`[VTpass Pay] Sending payload for ${cleanService}:`, JSON.stringify(payload));
 
   try {
     const res = await fetch(url, {
@@ -272,7 +313,7 @@ export async function purchaseDstvSubscription(
           requestId,
           amount: Number(data.amount || amount || 0),
           purchasedCode: data.purchased_code || '',
-          providerResponse: 'Transaction queued at MultiChoice broadcast switch (Pending).',
+          providerResponse: 'Transaction queued at broadcaster switch (Pending).',
           rawResponse: data,
         };
       }
@@ -319,6 +360,9 @@ export async function purchaseDstvSubscription(
     };
   }
 }
+
+// Backward-compatible alias
+export const purchaseDstvSubscription = purchaseCableSubscription;
 
 /**
  * Requery Transaction Status with VTpass /api/requery

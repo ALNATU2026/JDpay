@@ -309,7 +309,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
                 <div className="pt-2 space-y-2 border-t border-slate-200/60 text-xs text-slate-600">
                   <div className="flex items-center justify-between">
                     <span>Popular: GOtv Supa+</span>
-                    <span className="font-bold text-slate-900 tabular-nums">₦15,700/mo</span>
+                    <span className="font-bold text-slate-900 tabular-nums">₦16,800/mo</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Channels</span>
@@ -351,12 +351,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
 
                 <div className="pt-2 space-y-2 border-t border-slate-200/60 text-xs text-slate-600">
                   <div className="flex items-center justify-between">
-                    <span>Popular: Super Bouquet</span>
-                    <span className="font-bold text-slate-900 tabular-nums">₦8,200/mo</span>
+                    <span>Popular: Super (Dish)</span>
+                    <span className="font-bold text-slate-900 tabular-nums">₦9,800/mo</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Channels</span>
-                    <span className="font-semibold text-slate-900">90+ Channels</span>
+                    <span className="font-semibold text-slate-900">95+ Channels</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Verification</span>

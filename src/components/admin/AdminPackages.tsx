@@ -27,6 +27,25 @@ export const AdminPackages: React.FC<AdminPackagesProps> = ({ adminUser }) => {
   const [newPkgChannels, setNewPkgChannels] = useState<number>(80);
   const [newPkgDesc, setNewPkgDesc] = useState('');
 
+  // Sync Live State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
+
+  const handleSyncVtpass = async () => {
+    try {
+      setIsSyncing(true);
+      setSyncStatusMsg('');
+      const res = await adminService.syncVtpassPackages();
+      setSyncStatusMsg(res.message || 'Live packages synchronized from VTpass!');
+      await loadPackages();
+      setTimeout(() => setSyncStatusMsg(''), 6000);
+    } catch (err: any) {
+      alert(err.message || 'VTpass synchronization failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const loadPackages = async () => {
     try {
       setLoading(true);
@@ -96,19 +115,39 @@ export const AdminPackages: React.FC<AdminPackagesProps> = ({ adminUser }) => {
             Cable Bouquet Packages & Pricing
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Configure official subscriber pricing, channel bouquets, and visibility across all decoders.
+            Official broadcaster subscriber pricing, channel bouquets, and live VTpass variations for DStv, StarTimes, and GOtv.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-colors shadow-xs"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Add New Bouquet</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSyncVtpass}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl transition-colors shadow-2xs disabled:opacity-50"
+            title="Fetch live official prices and packages from VTpass REST API"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-purple-600 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing VTpass...' : 'Sync Live VTpass'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-colors shadow-xs"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Add New Bouquet</span>
+          </button>
+        </div>
       </div>
+
+      {syncStatusMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium rounded-xl flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{syncStatusMsg}</span>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col sm:flex-row items-center gap-3">

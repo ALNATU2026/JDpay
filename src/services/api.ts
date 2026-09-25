@@ -16,6 +16,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
@@ -23,18 +24,40 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || 'Network request failed');
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (netErr: any) {
+    throw new Error(`Network request failed: ${netErr.message || 'Unable to connect to server'}`);
   }
 
-  return data;
+  // Safe parsing: gracefully handle HTML error pages (e.g. 404 from Vercel/proxies) vs valid JSON
+  const rawText = await response.text();
+  let data: any = null;
+
+  if (rawText && rawText.trim().length > 0) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      // Body is not valid JSON (e.g., HTML error page: "<!DOCTYPE html>..." or "The page cannot be found...")
+      if (!response.ok) {
+        throw new Error(
+          `Server returned status ${response.status} (${response.statusText || 'Endpoint unavailable'}).`
+        );
+      }
+      throw new Error('Server returned an invalid non-JSON response.');
+    }
+  }
+
+  if (!response.ok) {
+    const errorMsg = data?.error || data?.message || `Request failed with status ${response.status}`;
+    throw new Error(errorMsg);
+  }
+
+  return data as T;
 }
 
 export const api = {
@@ -189,14 +212,18 @@ export const api = {
         status: string;
         lastChecked: string;
       }>('/admin/vtpass/status'),
-    syncVtpassPackages: () =>
+    syncVtpassPackages: (service?: string) =>
       request<{
         success: boolean;
         message: string;
-        count: number;
-        added: number;
-        updated: number;
-      }>('/admin/vtpass/sync', { method: 'POST' }),
+        purgedOld?: number;
+        dstv?: { count: number; added: number; updated: number };
+        startimes?: { count: number; added: number; updated: number };
+        gotv?: { count: number; added: number; updated: number };
+        count?: number;
+        added?: number;
+        updated?: number;
+      }>(service ? `/admin/vtpass/sync?service=${service}` : '/admin/vtpass/sync', { method: 'POST' }),
     requeryTransaction: (id: string) =>
       request<{
         success: boolean;

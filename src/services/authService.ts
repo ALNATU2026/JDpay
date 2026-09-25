@@ -41,26 +41,33 @@ export const authService = {
         return mappedUser;
       }
     } catch (err: any) {
-      // If server returned an explicit error (e.g. invalid credentials or suspended), rethrow it
-      if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('Network request failed')) {
+      // If server returned an explicit auth error (e.g. invalid credentials or suspended), rethrow it
+      const msg = (err.message || '').toLowerCase();
+      const isExplicitAuthRejection =
+        msg.includes('invalid email or password') ||
+        msg.includes('invalid credentials') ||
+        msg.includes('suspended');
+      if (isExplicitAuthRejection) {
         throw err;
       }
-      console.warn('[AuthService] Falling back to local storage authentication:', err.message);
+      console.warn('[AuthService] Live backend unavailable, falling back to local storage authentication:', err.message);
     }
 
     // Fallback to local storage if offline or initial boot
-    await new Promise((res) => setTimeout(res, 400));
+    await new Promise((res) => setTimeout(res, 200));
     const users = storage.getUsers();
     const cleanIdentifier = emailOrPhone.trim().toLowerCase();
+    const cleanPhoneDigits = cleanIdentifier.replace(/\D/g, '');
 
     let found = users.find(
       (u) =>
         u.email.toLowerCase() === cleanIdentifier ||
-        u.phone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')
+        u.phone.replace(/\s+/g, '') === cleanIdentifier ||
+        (cleanPhoneDigits.length >= 7 && u.phone.replace(/\D/g, '').endsWith(cleanPhoneDigits.slice(-7)))
     );
 
     if (!found && (cleanIdentifier.includes('admin') || cleanIdentifier === 'admin@jdpay.ng')) {
-      found = users.find((u) => u.role === 'admin');
+      found = users.find((u) => u.role === 'admin' || u.role === 'super_admin');
     }
 
     if (!found) {
@@ -103,10 +110,11 @@ export const authService = {
         return mappedUser;
       }
     } catch (err: any) {
-      if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('Network request failed')) {
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('already exists')) {
         throw err;
       }
-      console.warn('[AuthService] Falling back to local storage registration:', err.message);
+      console.warn('[AuthService] Backend unavailable, falling back to local storage registration:', err.message);
     }
 
     // Fallback

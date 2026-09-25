@@ -172,6 +172,7 @@ export const adminService = {
         id: (p.id || p._id || '').toString(),
         service: p.service,
         packageName: p.packageName || p.name,
+        variationCode: p.variationCode,
         price: Number(p.price) || 0,
         channelsCount: p.channelsCount || 50,
         description: p.description || '',
@@ -290,8 +291,8 @@ export const adminService = {
     return api.admin.getVtpassStatus();
   },
 
-  syncVtpassPackages: async () => {
-    return api.admin.syncVtpassPackages();
+  syncVtpassPackages: async (service?: string) => {
+    return api.admin.syncVtpassPackages(service);
   },
 
   requeryTransaction: async (transactionId: string) => {

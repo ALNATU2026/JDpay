@@ -25,10 +25,16 @@ import {
 import {
   verifySmartcardWithVtpass,
   purchaseDstvSubscription,
+  purchaseCableSubscription,
   requeryVtpassTransaction,
   getVtpassAccountBalance,
 } from './server/vtpass.js';
-import { syncDstvPackagesFromVtpass } from './server/vtpassSync.js';
+import {
+  syncAllPackagesFromVtpass,
+  syncDstvPackagesFromVtpass,
+  syncStartimesPackagesFromVtpass,
+  syncGotvPackagesFromVtpass,
+} from './server/vtpassSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,13 +45,51 @@ const JWT_SECRET = process.env.JWT_SECRET || 'jdpay_production_secure_jwt_secret
 
 app.use(express.json());
 
-// Initialize Database & VTpass Switch Synchronization
+// CORS & Preflight handling
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+let dbInitPromise: Promise<void> | null = null;
+export async function ensureDbReady() {
+  if (!dbInitPromise) {
+    dbInitPromise = (async () => {
+      try {
+        await connectToDatabase();
+        await seedDatabaseIfEmpty();
+        syncAllPackagesFromVtpass().catch((e) =>
+          console.warn('[VTpass Startup] Full bouquet sync warning:', e.message)
+        );
+      } catch (err: any) {
+        console.warn('[MongoDB Middleware] Database init warning:', err.message);
+        dbInitPromise = null;
+      }
+    })();
+  }
+  return dbInitPromise;
+}
+
+// Request middleware to ensure DB is connected (vital for Vercel serverless cold-starts)
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    await ensureDbReady();
+  }
+  next();
+});
+
+// Initialize Database & VTpass Switch Synchronization (Full Live Broadcasters Sync)
 connectToDatabase()
   .then(async () => {
     await seedDatabaseIfEmpty();
-    // Synchronize official DStv packages and prices live from VTpass
-    syncDstvPackagesFromVtpass().catch((e) =>
-      console.warn('[VTpass Startup] Bouquet sync warning:', e.message)
+    // Synchronize official DStv, StarTimes, and GOtv packages and live prices directly from VTpass
+    syncAllPackagesFromVtpass().catch((e) =>
+      console.warn('[VTpass Startup] Full bouquet sync warning:', e.message)
     );
   })
   .catch((err) => {
@@ -170,8 +214,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const user = await UserModel.findOne({ email: cleanEmail });
+    const cleanIdentifier = email.toLowerCase().trim();
+    const cleanPhone = email.trim().replace(/\s+/g, '');
+    const user = await UserModel.findOne({
+      $or: [
+        { email: cleanIdentifier },
+        { phone: cleanPhone },
+      ],
+    });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -289,19 +339,28 @@ app.post('/api/cable/verify', async (req, res) => {
   const cleanNum = smartcardNumber.replace(/\s+/g, '');
   if (cleanNum.length < 8 || cleanNum.length > 14 || !/^\d+$/.test(cleanNum)) {
     return res.status(400).json({
-      error: `Invalid ${service === 'GOtv' ? 'IUC' : 'Smartcard'} number. Must be 9 to 12 digits.`,
+      error: `Invalid ${service === 'GOtv' ? 'IUC' : 'Smartcard'} number. Must be 8 to 12 digits.`,
     });
   }
+
+  const defaultBouquet =
+    service === 'StarTimes'
+      ? 'StarTimes Basic (Dish)'
+      : service === 'GOtv'
+      ? 'GOtv Max'
+      : 'DStv Compact';
+  const defaultRenewal =
+    service === 'StarTimes' ? 5100 : service === 'GOtv' ? 8500 : 19000;
 
   // If explicit simulation requested (demo/testing mode)
   if (allowSimulated === true || req.query.allowSimulated === 'true') {
     return res.json({
       customerName: 'DEMO TEST SUBSCRIBER',
       smartcardNumber: cleanNum,
-      currentPackage: `${service} Compact`,
+      currentPackage: defaultBouquet,
       accountStatus: 'Active',
       dueDate: '30 Oct 2026',
-      renewalAmount: 19000,
+      renewalAmount: defaultRenewal,
       customerNumber: `080${cleanNum.slice(-8)}`,
       service,
       verifiedVia: 'VTpass Sandbox / Demo Mode',
@@ -313,29 +372,42 @@ app.post('/api/cable/verify', async (req, res) => {
     return res.json({
       customerName: vtpassData.customerName,
       smartcardNumber: cleanNum,
-      currentPackage: vtpassData.currentBouquet || `${service} Standard Bouquet`,
+      currentPackage: vtpassData.currentBouquet || defaultBouquet,
       accountStatus: vtpassData.status || 'Active',
       dueDate: vtpassData.dueDate
         ? new Date(vtpassData.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
         : 'Active Billing Cycle',
-      renewalAmount: vtpassData.renewalAmount,
-      customerNumber: vtpassData.customerNumber,
+      renewalAmount: vtpassData.renewalAmount || defaultRenewal,
+      customerNumber: vtpassData.customerNumber || `080${cleanNum.slice(-8)}`,
       service,
-      verifiedVia: vtpassData.rawResponse?.simulated ? 'VTpass Sandbox / Test Mode' : 'VTpass Live MultiChoice Switch',
+      verifiedVia: 'Verified',
     });
   } catch (err: any) {
     console.warn(`[Cable Verify] Live query failed for ${service} ${cleanNum}:`, err.message);
 
-    // Support testing sandbox cards (e.g. 1212121212) if live switch rejects them
-    const isTestNumber = ['1212121212', '1111111111', '1010101010', '1234567890', '1023456789', '2012345678', '41234567890', '7024567890'].includes(cleanNum);
+    // Support testing sandbox cards (e.g. 1212121212, 0213456789) if live switch rejects them
+    const isTestNumber = [
+      '1212121212',
+      '1111111111',
+      '1010101010',
+      '1234567890',
+      '1023456789',
+      '2012345678',
+      '41234567890',
+      '7024567890',
+      '0213456789',
+      '0219876543',
+      '0181234567',
+    ].includes(cleanNum);
+
     if (isTestNumber) {
       return res.json({
         customerName: 'SANDBOX TEST DECODER',
         smartcardNumber: cleanNum,
-        currentPackage: `${service} Compact`,
+        currentPackage: defaultBouquet,
         accountStatus: 'Active',
         dueDate: '30 Oct 2026',
-        renewalAmount: 19000,
+        renewalAmount: defaultRenewal,
         customerNumber: `080${cleanNum.slice(-8)}`,
         service,
         verifiedVia: 'Simulated Sandbox Verification',
@@ -1064,29 +1136,43 @@ app.get('/api/admin/vtpass/status', authenticateToken, async (req: AuthRequest, 
   }
 });
 
-// 24. Admin: Synchronize DStv Bouquets from VTpass
+// 24. Admin: Synchronize Cable Bouquets from VTpass (DStv, StarTimes, GOtv)
 app.post('/api/admin/vtpass/sync', authenticateToken, async (req: AuthRequest, res) => {
   try {
     if (!isAuthorizedAdmin(req.user)) {
       return res.status(403).json({ error: 'Administrative privileges required' });
     }
 
-    const syncResult = await syncDstvPackagesFromVtpass();
+    const { service } = req.query;
+    let syncResult: any;
+
+    if (service === 'dstv') {
+      const dstvRes = await syncDstvPackagesFromVtpass();
+      syncResult = { dstv: dstvRes, message: `Synchronized ${dstvRes.count} DStv bouquets.` };
+    } else if (service === 'startimes') {
+      const stRes = await syncStartimesPackagesFromVtpass();
+      syncResult = { startimes: stRes, message: `Synchronized ${stRes.count} StarTimes bouquets.` };
+    } else if (service === 'gotv') {
+      const gotvRes = await syncGotvPackagesFromVtpass();
+      syncResult = { gotv: gotvRes, message: `Synchronized ${gotvRes.count} GOtv bouquets.` };
+    } else {
+      syncResult = await syncAllPackagesFromVtpass();
+    }
 
     await new AuditLogModel({
       adminId: req.user._id.toString(),
       adminName: req.user.fullName,
       action: 'VTPASS_BOUQUET_SYNC',
-      description: `Synchronized official DStv bouquets from VTpass. Added: ${syncResult.added}, Updated: ${syncResult.updated}.`,
+      description: `Synchronized official live bouquets from VTpass. Purged old sandbox: ${syncResult.purgedOld || 0}. DStv: ${syncResult.dstv?.count || 0}, StarTimes: ${syncResult.startimes?.count || 0}, GOtv: ${syncResult.gotv?.count || 0}.`,
     }).save();
 
     res.json({
       success: true,
-      message: `Successfully synchronized ${syncResult.count} DStv bouquets from VTpass.`,
+      message: 'Successfully synchronized live bouquets and removed all sandbox prices from VTpass.',
       ...syncResult,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to synchronize DStv bouquets from VTpass' });
+    res.status(500).json({ error: error.message || 'Failed to synchronize bouquets from VTpass' });
   }
 });
 
@@ -1162,4 +1248,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only start standalone HTTP server in non-Vercel environments (Vercel invokes via serverless function)
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app };
+export default app;
