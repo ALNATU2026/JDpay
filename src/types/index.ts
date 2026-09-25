@@ -19,6 +19,8 @@ export interface User {
     accountNumber: string;
     accountName: string;
   };
+  pin?: string;
+  hasPin?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,9 +57,55 @@ export interface Transaction {
   purchasedCode?: string;
   providerResponse?: string;
   failureReason?: string;
+  commissionRate?: number;
+  commissionPercentage?: number;
+  commissionAmount?: number;
+  recordedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CommissionRecord {
+  id: string;
+  transactionId?: string;
+  transactionReference: string;
+  service: CableServiceName;
+  package: string;
+  smartcardNumber: string;
+  customerName: string;
+  amount: number;
+  commissionRate: number; // 0.018 for DStv, 0.02 for GOtv/StarTimes
+  commissionPercentage: number; // 1.8 for DStv, 2.0 for GOtv/StarTimes
+  commissionAmount: number;
+  provider: string; // 'VTpass Live Gateway'
+  providerReference?: string;
+  status: TransactionStatus;
+  recordedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CommissionSummary {
+  totalCommissionEarned: number;
+  dstvCommission: number;
+  dstvVolume: number;
+  dstvCount: number;
+  gotvCommission: number;
+  gotvVolume: number;
+  gotvCount: number;
+  startimesCommission: number;
+  startimesVolume: number;
+  startimesCount: number;
+  totalTransactionsCount: number;
+  totalVolume: number;
+}
+
+export const getCommissionRate = (service: CableServiceName): { rate: number; percentage: number } => {
+  if (service === 'DStv') {
+    return { rate: 0.018, percentage: 1.8 };
+  }
+  return { rate: 0.02, percentage: 2.0 };
+};
 
 export type WalletTxType = 'credit' | 'debit';
 

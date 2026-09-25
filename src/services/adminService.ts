@@ -4,11 +4,14 @@ import {
   CablePackage,
   CableServiceConfig,
   CableServiceName,
+  CommissionRecord,
+  CommissionSummary,
   Transaction,
   User,
   UserStatus,
 } from '../types';
 import { api } from './api';
+import { storage } from './storage';
 
 export const adminService = {
   getStats: async (): Promise<AdminStats> => {
@@ -297,5 +300,224 @@ export const adminService = {
 
   requeryTransaction: async (transactionId: string) => {
     return api.admin.requeryTransaction(transactionId);
+  },
+
+  // Commission Calculations & Service
+  calculateCommission: (service: CableServiceName, amount: number) => {
+    const percentage = service === 'DStv' ? 1.8 : 2.0;
+    const rate = percentage / 100;
+    const commissionAmount = Number(((amount * percentage) / 100).toFixed(2));
+    return {
+      rate,
+      percentage,
+      commissionAmount,
+    };
+  },
+
+  getCommissions: async (params: {
+    service?: CableServiceName | 'all';
+    status?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}): Promise<{ commissions: CommissionRecord[]; summary: CommissionSummary }> => {
+    try {
+      const res = await api.admin.getCommissions({
+        service: params.service,
+        status: params.status,
+        search: params.search,
+        startDate: params.startDate,
+        endDate: params.endDate,
+      });
+
+      if (res && res.success && res.commissions) {
+        const mapped: CommissionRecord[] = res.commissions.map((c: any) => ({
+          id: (c.id || c._id || '').toString(),
+          transactionId: c.transactionId,
+          transactionReference: c.transactionReference,
+          service: c.service,
+          package: c.package,
+          smartcardNumber: c.smartcardNumber,
+          customerName: c.customerName,
+          amount: Number(c.amount) || 0,
+          commissionRate: Number(c.commissionRate) || (c.service === 'DStv' ? 0.018 : 0.02),
+          commissionPercentage: Number(c.commissionPercentage) || (c.service === 'DStv' ? 1.8 : 2.0),
+          commissionAmount: Number(c.commissionAmount) || 0,
+          provider: c.provider || 'VTpass Live Gateway',
+          providerReference: c.providerReference,
+          status: c.status || 'SUCCESSFUL',
+          recordedBy: c.recordedBy || 'Admin Direct',
+          createdAt: c.createdAt || new Date().toISOString(),
+          updatedAt: c.updatedAt,
+        }));
+
+        storage.saveCommissions(mapped);
+        return {
+          commissions: mapped,
+          summary: res.summary,
+        };
+      }
+    } catch (err: any) {
+      console.warn('[AdminService] Falling back to local commission storage:', err.message);
+    }
+
+    // Local storage fallback
+    let comms = storage.getCommissions();
+    if (params.service && params.service !== 'all') {
+      comms = comms.filter((c) => c.service === params.service);
+    }
+    if (params.status && params.status !== 'all') {
+      comms = comms.filter((c) => c.status === params.status);
+    }
+    if (params.search && params.search.trim()) {
+      const q = params.search.toLowerCase().trim();
+      comms = comms.filter(
+        (c) =>
+          c.customerName.toLowerCase().includes(q) ||
+          c.smartcardNumber.includes(q) ||
+          c.transactionReference.toLowerCase().includes(q) ||
+          c.package.toLowerCase().includes(q)
+      );
+    }
+    if (params.startDate) {
+      const start = new Date(params.startDate).getTime();
+      comms = comms.filter((c) => new Date(c.createdAt).getTime() >= start);
+    }
+    if (params.endDate) {
+      const end = new Date(params.endDate).setHours(23, 59, 59, 999);
+      comms = comms.filter((c) => new Date(c.createdAt).getTime() <= end);
+    }
+
+    const allComms = storage.getCommissions();
+    const summary: CommissionSummary = {
+      totalCommissionEarned: 0,
+      dstvCommission: 0,
+      dstvVolume: 0,
+      dstvCount: 0,
+      gotvCommission: 0,
+      gotvVolume: 0,
+      gotvCount: 0,
+      startimesCommission: 0,
+      startimesVolume: 0,
+      startimesCount: 0,
+      totalTransactionsCount: allComms.length,
+      totalVolume: 0,
+    };
+
+    for (const c of allComms) {
+      if (c.status === 'SUCCESSFUL' || c.status === 'PENDING') {
+        summary.totalCommissionEarned += c.commissionAmount || 0;
+        summary.totalVolume += c.amount || 0;
+
+        if (c.service === 'DStv') {
+          summary.dstvCommission += c.commissionAmount || 0;
+          summary.dstvVolume += c.amount || 0;
+          summary.dstvCount += 1;
+        } else if (c.service === 'GOtv') {
+          summary.gotvCommission += c.commissionAmount || 0;
+          summary.gotvVolume += c.amount || 0;
+          summary.gotvCount += 1;
+        } else if (c.service === 'StarTimes') {
+          summary.startimesCommission += c.commissionAmount || 0;
+          summary.startimesVolume += c.amount || 0;
+          summary.startimesCount += 1;
+        }
+      }
+    }
+
+    summary.totalCommissionEarned = Number(summary.totalCommissionEarned.toFixed(2));
+    summary.dstvCommission = Number(summary.dstvCommission.toFixed(2));
+    summary.gotvCommission = Number(summary.gotvCommission.toFixed(2));
+    summary.startimesCommission = Number(summary.startimesCommission.toFixed(2));
+
+    return {
+      commissions: comms,
+      summary,
+    };
+  },
+
+  payCableDirect: async (payload: {
+    service: CableServiceName;
+    package: string;
+    smartcardNumber: string;
+    customerName: string;
+    amount: number;
+    phone?: string;
+    variationCode?: string;
+    subscriptionType?: 'change' | 'renew';
+    notes?: string;
+  }): Promise<{ transaction: Transaction; commission: CommissionRecord }> => {
+    const res = await api.admin.payCableDirect({
+      ...payload,
+      subscriptionType: payload.subscriptionType || 'change',
+    });
+
+    if (res && res.success && res.transaction) {
+      const tx = res.transaction;
+      const comm = res.commission;
+
+      // Update local storage caches
+      const txs = storage.getTransactions();
+      txs.unshift(tx);
+      storage.saveTransactions(txs);
+
+      const comms = storage.getCommissions();
+      comms.unshift(comm);
+      storage.saveCommissions(comms);
+
+      return {
+        transaction: tx,
+        commission: comm,
+      };
+    }
+
+    throw new Error('Direct admin payment returned failure or no response from switch.');
+  },
+
+  exportCommissionsCSV: (commissions: CommissionRecord[]): void => {
+    const headers = [
+      'Transaction Reference',
+      'Date & Time',
+      'Provider (Service)',
+      'Bouquet Package',
+      'Customer Name',
+      'Smartcard / IUC',
+      'Payment Volume (NGN)',
+      'Commission Rate (%)',
+      'Commission Earned (NGN)',
+      'Source Switch',
+      'Provider Reference',
+      'Recorded By',
+      'Status',
+    ];
+
+    const rows = commissions.map((c) => [
+      `"${c.transactionReference}"`,
+      `"${new Date(c.createdAt).toLocaleString('en-NG')}"`,
+      `"${c.service}"`,
+      `"${c.package}"`,
+      `"${c.customerName}"`,
+      `"${c.smartcardNumber}"`,
+      c.amount,
+      `"${c.commissionPercentage}%"`,
+      c.commissionAmount,
+      `"${c.provider}"`,
+      `"${c.providerReference || ''}"`,
+      `"${c.recordedBy || 'Admin Direct'}"`,
+      `"${c.status}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      `JDPAY_VTpass_Commissions_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   },
 };

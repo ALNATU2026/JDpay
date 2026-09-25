@@ -1,6 +1,7 @@
 import {
   User,
   Transaction,
+  CommissionRecord,
   WalletTransaction,
   CablePackage,
   CableServiceConfig,
@@ -13,6 +14,7 @@ const STORAGE_KEYS = {
   USERS: 'jdpay_users_v1',
   CURRENT_USER: 'jdpay_current_user_v1',
   TRANSACTIONS: 'jdpay_transactions_v1',
+  COMMISSIONS: 'jdpay_commissions_v1',
   WALLET_TX: 'jdpay_wallet_tx_v1',
   PACKAGES: 'jdpay_packages_v2',
   SERVICES: 'jdpay_services_v1',
@@ -835,5 +837,53 @@ export const storage = {
 
   saveSupportTickets: (tickets: SupportTicket[]): void => {
     localStorage.setItem(STORAGE_KEYS.SUPPORT_TICKETS, JSON.stringify(tickets));
+  },
+
+  getCommissions: (): CommissionRecord[] => {
+    const raw = localStorage.getItem(STORAGE_KEYS.COMMISSIONS);
+    let parsed: CommissionRecord[] = [];
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = [];
+      }
+    }
+
+    // If empty or fewer than transactions, compute/backfill from transactions
+    const txs = storage.getTransactions();
+    if (parsed.length === 0 && txs.length > 0) {
+      parsed = txs.map((tx) => {
+        const commPct = tx.service === 'DStv' ? 1.8 : 2.0;
+        const commRate = commPct / 100;
+        const commAmt = Number(((tx.amount * commPct) / 100).toFixed(2));
+        return {
+          id: `comm_${tx.id}`,
+          transactionId: tx.id,
+          transactionReference: tx.transactionReference,
+          service: tx.service,
+          package: tx.package,
+          smartcardNumber: tx.smartcardNumber,
+          customerName: tx.customerName || 'Subscriber',
+          amount: tx.amount,
+          commissionRate: commRate,
+          commissionPercentage: commPct,
+          commissionAmount: commAmt,
+          provider: 'VTpass Live Gateway',
+          providerReference: tx.providerReference,
+          status: tx.status,
+          recordedBy: tx.recordedBy || 'Admin Direct',
+          createdAt: tx.createdAt,
+          updatedAt: tx.updatedAt,
+        };
+      });
+      localStorage.setItem(STORAGE_KEYS.COMMISSIONS, JSON.stringify(parsed));
+    }
+
+    return parsed;
+  },
+
+  saveCommissions: (commissions: CommissionRecord[]): void => {
+    localStorage.setItem(STORAGE_KEYS.COMMISSIONS, JSON.stringify(commissions));
   },
 };

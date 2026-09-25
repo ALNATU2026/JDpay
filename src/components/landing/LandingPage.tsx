@@ -15,6 +15,11 @@ import {
   Phone,
   Mail,
   Sparkles,
+  LogIn,
+  UserPlus,
+  Menu,
+  X,
+  LayoutDashboard,
 } from 'lucide-react';
 import { CablePackage, User } from '../../types';
 import { cableService } from '../../services/cableService';
@@ -33,6 +38,7 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUser }) => {
   const [activeTab, setActiveTab] = useState<'DStv' | 'GOtv' | 'StarTimes'>('DStv');
   const [quickSmartcard, setQuickSmartcard] = useState('');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -42,6 +48,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
   });
 
   const packages: CablePackage[] = cableService.getPackages(activeTab).slice(0, 4);
+
+  const scrollToSection = (id: string) => {
+    setIsMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   const handleQuickPay = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +79,228 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-900">
+      {/* ===================== TOP NAVIGATION BAR WITH SHORTCUTS ===================== */}
+      <header className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-18">
+            {/* Left: Brand Logo & Emblem */}
+            <div
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-3 cursor-pointer group"
+            >
+              <img
+                src={jdpayLogoEmblem}
+                alt="JDpay Official Brand Logo"
+                className="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow-sm group-hover:scale-105 transition-transform"
+                referrerPolicy="no-referrer"
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-black tracking-tight text-white font-sans">
+                  JD<span className="text-blue-400">pay</span>
+                </span>
+                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                  Official
+                </span>
+              </div>
+            </div>
+
+            {/* Center: Menu Items List (Desktop) */}
+            <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+              <button
+                type="button"
+                onClick={() => scrollToSection('services')}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+              >
+                Cable Services
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('how-it-works')}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+              >
+                How It Works
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('services')}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+              >
+                Bouquet Pricing
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('about')}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+              >
+                Why JDpay
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('contact')}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+              >
+                Contact Desk
+              </button>
+            </nav>
+
+            {/* Right: Direct Shortcuts for Login & Sign Up */}
+            <div className="hidden sm:flex items-center gap-2.5">
+              {!currentUser ? (
+                <>
+                  {/* Shortcut: Login Button */}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/login')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-200 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-xl transition-all shadow-2xs hover:border-slate-500 cursor-pointer"
+                    title="Direct shortcut to Login"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Log In</span>
+                  </button>
+
+                  {/* Shortcut: Sign Up Button */}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/signup')}
+                    className="inline-flex items-center gap-1.5 px-4.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-md shadow-blue-600/25 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                    title="Direct shortcut to Sign Up"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Sign Up Free</span>
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      currentUser.role === 'admin' || currentUser.role === 'super_admin'
+                        ? onNavigate('/admin')
+                        : onNavigate('/dashboard')
+                    }
+                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-md shadow-blue-600/25 cursor-pointer"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>
+                      {currentUser.role === 'admin' || currentUser.role === 'super_admin'
+                        ? 'Admin Portal'
+                        : 'My Dashboard'}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Hamburger Toggle */}
+            <div className="md:hidden flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                aria-label="Toggle Menu"
+              >
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Drawer */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-slate-950 border-t border-slate-800 px-4 py-4 space-y-3 shadow-2xl animate-in slide-in-from-top-2 duration-150">
+            {/* Prominent Shortcut Menu List for Login and Sign Up */}
+            <div className="p-3 rounded-2xl bg-linear-to-r from-blue-950/60 to-purple-950/60 border border-blue-900/50 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-blue-300 px-1">
+                Account Shortcuts
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigate('/login');
+                  }}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl transition-all cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Log In</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigate('/signup');
+                  }}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Sign Up</span>
+                </button>
+              </div>
+
+              {currentUser && (
+                <div className="pt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onNavigate(
+                        currentUser.role === 'admin' || currentUser.role === 'super_admin'
+                          ? '/admin'
+                          : '/dashboard'
+                      );
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-emerald-300 bg-emerald-950/40 border border-emerald-500/30 rounded-xl"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>Go to Dashboard ({currentUser.fullName})</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* General Landing Menu Items */}
+            <div className="space-y-1 pt-1">
+              <button
+                type="button"
+                onClick={() => scrollToSection('services')}
+                className="w-full text-left py-2 px-3 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                📺 Cable TV Services
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('how-it-works')}
+                className="w-full text-left py-2 px-3 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                ⚡ How It Works
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('services')}
+                className="w-full text-left py-2 px-3 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                💰 Bouquet Pricing & Plans
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('about')}
+                className="w-full text-left py-2 px-3 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                🛡️ Why JDpay
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('contact')}
+                className="w-full text-left py-2 px-3 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                📞 Contact Support
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
       {/* ===================== HERO SECTION ===================== */}
       <section className="relative pt-10 pb-16 md:pt-16 md:pb-24 overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
         {/* Cinematic Background Picture with Ambient Gradient Overlays */}
@@ -148,6 +384,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
                   </button>
                 )}
               </div>
+
+              {!currentUser && (
+                <div className="flex items-center gap-3 text-xs text-slate-300 pt-1">
+                  <span className="text-slate-400">Quick shortcuts:</span>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/login')}
+                    className="font-bold text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Log In
+                  </button>
+                  <span className="text-white/30">•</span>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/signup')}
+                    className="font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Sign Up
+                  </button>
+                </div>
+              )}
 
               {/* Trust Indicators */}
               <div className="pt-6 border-t border-white/15 grid grid-cols-3 gap-4 text-left">

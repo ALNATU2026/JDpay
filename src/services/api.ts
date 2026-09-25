@@ -64,7 +64,7 @@ export const api = {
   health: () => request<{ status: string; database: { state: string; host: string; dbName: string } }>('/health'),
 
   auth: {
-    register: (payload: { fullName: string; email: string; phone: string; password: string }) =>
+    register: (payload: { fullName: string; email: string; phone: string; password: string; pin?: string }) =>
       request<{ user: any; token: string }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -76,11 +76,23 @@ export const api = {
         body: JSON.stringify(payload),
       }),
 
+    loginPin: (payload: { identifier: string; pin: string }) =>
+      request<{ user: any; token: string }>('/auth/login-pin', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+
     me: () => request<{ user: any }>('/auth/me'),
 
-    updateProfile: (payload: { fullName?: string; phone?: string; currentPassword?: string; newPassword?: string }) =>
+    updateProfile: (payload: { fullName?: string; phone?: string; currentPassword?: string; newPassword?: string; pin?: string; currentPin?: string }) =>
       request<{ user: any }>('/auth/profile', {
         method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+
+    updatePin: (payload: { newPin: string; currentPin?: string; password?: string }) =>
+      request<{ success: boolean; user: any }>('/auth/update-pin', {
+        method: 'POST',
         body: JSON.stringify(payload),
       }),
   },
@@ -133,6 +145,7 @@ export const api = {
       phone?: string;
       variationCode?: string;
       subscriptionType?: 'change' | 'renew';
+      pin?: string;
     }) =>
       request<{ success: boolean; transaction: any; walletBalance: number }>('/transactions', {
         method: 'POST',
@@ -166,6 +179,27 @@ export const api = {
       request<{ success: boolean; customer: any }>(`/admin/customers/${customerId}/status`, {
         method: 'POST',
         body: JSON.stringify({ status }),
+      }),
+    resetCustomerPin: (customerId: string) =>
+      request<{ success: boolean; defaultPin: string; message: string; customer: any }>(
+        `/admin/customers/${customerId}/reset-pin`,
+        { method: 'POST' }
+      ),
+    updateCustomer: (
+      customerId: string,
+      data: {
+        fullName?: string;
+        email?: string;
+        phone?: string;
+        role?: string;
+        status?: string;
+        newPassword?: string;
+        pin?: string;
+      }
+    ) =>
+      request<{ success: boolean; message: string; customer: any }>(`/admin/customers/${customerId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
       }),
     adjustWallet: (customerId: string, amount: number, type: 'credit' | 'debit', reason: string) =>
       request<{ success: boolean; customer: any }>('/admin/adjust-wallet', {
@@ -231,5 +265,52 @@ export const api = {
         requeryResult: any;
         statusUpdated: boolean;
       }>(`/admin/transactions/${id}/requery`, { method: 'POST' }),
+    getCommissions: (params: { service?: string; status?: string; search?: string; startDate?: string; endDate?: string } = {}) => {
+      const searchParams = new URLSearchParams();
+      if (params.service && params.service !== 'all') searchParams.append('service', params.service);
+      if (params.status && params.status !== 'all') searchParams.append('status', params.status);
+      if (params.search) searchParams.append('search', params.search);
+      if (params.startDate) searchParams.append('startDate', params.startDate);
+      if (params.endDate) searchParams.append('endDate', params.endDate);
+      const qs = searchParams.toString();
+      return request<{
+        success: boolean;
+        commissions: any[];
+        summary: {
+          totalCommissionEarned: number;
+          dstvCommission: number;
+          dstvVolume: number;
+          dstvCount: number;
+          gotvCommission: number;
+          gotvVolume: number;
+          gotvCount: number;
+          startimesCommission: number;
+          startimesVolume: number;
+          startimesCount: number;
+          totalTransactionsCount: number;
+          totalVolume: number;
+        };
+      }>(`/admin/commissions${qs ? `?${qs}` : ''}`);
+    },
+    payCableDirect: (payload: {
+      service: string;
+      package: string;
+      smartcardNumber: string;
+      customerName: string;
+      amount: number;
+      phone?: string;
+      variationCode?: string;
+      subscriptionType?: 'change' | 'renew';
+      notes?: string;
+    }) =>
+      request<{
+        success: boolean;
+        transaction: any;
+        commission: any;
+        vtpassResult?: any;
+      }>('/admin/cable-pay', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
   },
 };

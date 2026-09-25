@@ -7,6 +7,7 @@ export interface IUser extends Document {
   email: string;
   phone: string;
   password?: string;
+  pin?: string;
   role: 'customer' | 'admin' | 'super_admin';
   isMegaSuperAdmin?: boolean;
   adminTitle?: string;
@@ -20,6 +21,7 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
+  comparePin(candidate: string): boolean;
   toJSON(): any;
 }
 
@@ -29,6 +31,7 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     phone: { type: String, required: true, trim: true },
     password: { type: String, required: true },
+    pin: { type: String, default: '123456', trim: true },
     role: { type: String, enum: ['customer', 'admin', 'super_admin'], default: 'customer' },
     isMegaSuperAdmin: { type: Boolean, default: false },
     adminTitle: { type: String },
@@ -68,6 +71,11 @@ UserSchema.methods.comparePassword = async function (candidate: string): Promise
   return bcrypt.compare(candidate, this.password);
 };
 
+UserSchema.methods.comparePin = function (candidate: string): boolean {
+  const currentPin = this.pin || '123456';
+  return currentPin.toString().trim() === (candidate || '').toString().trim();
+};
+
 UserSchema.methods.toJSON = function () {
   const obj = this.toObject();
   obj.id = obj._id.toString();
@@ -76,6 +84,8 @@ UserSchema.methods.toJSON = function () {
     obj.isMegaSuperAdmin = true;
     obj.adminTitle = obj.adminTitle || 'Mega Super Admin';
   }
+  obj.pin = this.pin || '123456';
+  obj.hasPin = !!this.pin;
   delete obj.password;
   delete obj.__v;
   return obj;
@@ -99,6 +109,10 @@ export interface ITransaction extends Document {
   purchasedCode?: string;
   providerResponse?: string;
   failureReason?: string;
+  commissionRate?: number;
+  commissionPercentage?: number;
+  commissionAmount?: number;
+  recordedBy?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,6 +140,10 @@ const TransactionSchema = new Schema<ITransaction>(
     purchasedCode: { type: String },
     providerResponse: { type: String },
     failureReason: { type: String },
+    commissionRate: { type: Number },
+    commissionPercentage: { type: Number },
+    commissionAmount: { type: Number },
+    recordedBy: { type: String },
   },
   { timestamps: true }
 );
@@ -291,10 +309,67 @@ AuditLogSchema.methods.toJSON = function () {
   return obj;
 };
 
+// ================= COMMISSION =================
+export interface ICommission extends Document {
+  transactionId?: string;
+  transactionReference: string;
+  service: 'DStv' | 'GOtv' | 'StarTimes';
+  package: string;
+  smartcardNumber: string;
+  customerName: string;
+  amount: number;
+  commissionRate: number; // 0.018 for DStv, 0.02 for GOtv/StarTimes
+  commissionPercentage: number; // 1.8 for DStv, 2.0 for GOtv/StarTimes
+  commissionAmount: number;
+  provider: string; // 'VTpass'
+  providerReference?: string;
+  status: 'SUCCESSFUL' | 'PENDING' | 'FAILED' | 'REFUNDED';
+  recordedBy?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  toJSON(): any;
+}
+
+const CommissionSchema = new Schema<ICommission>(
+  {
+    transactionId: { type: String, index: true },
+    transactionReference: { type: String, required: true, index: true },
+    service: { type: String, enum: ['DStv', 'GOtv', 'StarTimes'], required: true, index: true },
+    package: { type: String, required: true },
+    smartcardNumber: { type: String, required: true, index: true },
+    customerName: { type: String, required: true },
+    amount: { type: Number, required: true },
+    commissionRate: { type: Number, required: true },
+    commissionPercentage: { type: Number, required: true },
+    commissionAmount: { type: Number, required: true },
+    provider: { type: String, default: 'VTpass' },
+    providerReference: { type: String },
+    status: {
+      type: String,
+      enum: ['SUCCESSFUL', 'PENDING', 'FAILED', 'REFUNDED'],
+      default: 'SUCCESSFUL',
+      index: true,
+    },
+    recordedBy: { type: String, default: 'System' },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+CommissionSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  obj.id = obj._id.toString();
+  delete obj.__v;
+  return obj;
+};
+
 // Export Models
 export const UserModel: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
 export const TransactionModel: Model<ITransaction> =
   mongoose.models.Transaction || mongoose.model<ITransaction>('Transaction', TransactionSchema);
+export const CommissionModel: Model<ICommission> =
+  mongoose.models.Commission || mongoose.model<ICommission>('Commission', CommissionSchema);
 export const WalletTransactionModel: Model<IWalletTransaction> =
   mongoose.models.WalletTransaction || mongoose.model<IWalletTransaction>('WalletTransaction', WalletTransactionSchema);
 export const CablePackageModel: Model<ICablePackage> =

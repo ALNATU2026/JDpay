@@ -28,6 +28,7 @@ import { AdminOverview } from './components/admin/AdminOverview';
 import { AdminCustomers } from './components/admin/AdminCustomers';
 import { AdminTransactions } from './components/admin/AdminTransactions';
 import { AdminCablePayments } from './components/admin/AdminCablePayments';
+import { AdminCommissions } from './components/admin/AdminCommissions';
 import { AdminWallets } from './components/admin/AdminWallets';
 import { AdminPendingTransactions } from './components/admin/AdminPendingTransactions';
 import { AdminFailedTransactions } from './components/admin/AdminFailedTransactions';
@@ -172,6 +173,7 @@ export default function App() {
         {currentPath === '/admin/customers' && <AdminCustomers adminUser={currentUser} />}
         {currentPath === '/admin/transactions' && <AdminTransactions />}
         {currentPath === '/admin/cable-payments' && <AdminCablePayments />}
+        {currentPath === '/admin/commissions' && <AdminCommissions adminUser={currentUser} />}
         {currentPath === '/admin/wallets' && <AdminWallets adminUser={currentUser} />}
         {currentPath === '/admin/pending' && <AdminPendingTransactions adminUser={currentUser} />}
         {currentPath === '/admin/failed' && <AdminFailedTransactions adminUser={currentUser} />}

@@ -16,6 +16,7 @@ import { seedDatabaseIfEmpty } from './server/seed.js';
 import {
   UserModel,
   TransactionModel,
+  CommissionModel,
   WalletTransactionModel,
   CablePackageModel,
   NotificationModel,
@@ -153,7 +154,7 @@ app.get('/api/health', (req, res) => {
 // 2. Auth: Register
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { fullName, email, phone, password } = req.body;
+    const { fullName, email, phone, password, pin } = req.body;
     if (!fullName || !email || !phone || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -164,6 +165,8 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email address already exists.' });
     }
 
+    const userPin = pin && /^\d{6}$/.test(pin.toString().trim()) ? pin.toString().trim() : '123456';
+
     // Generate simulated virtual account
     const randomSuffix = Math.floor(1000000000 + Math.random() * 9000000000).toString();
     const newUser = new UserModel({
@@ -171,6 +174,7 @@ app.post('/api/auth/register', async (req, res) => {
       email: cleanEmail,
       phone: phone.trim(),
       password,
+      pin: userPin,
       role: 'customer',
       walletBalance: 0,
       status: 'active',
@@ -268,6 +272,71 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// 3b. Auth: Login with 6-digit PIN
+app.post('/api/auth/login-pin', async (req, res) => {
+  try {
+    const { identifier, email, pin } = req.body;
+    const cleanId = (identifier || email || '').toString().trim();
+    if (!cleanId) {
+      return res.status(400).json({ error: 'Email or phone number is required' });
+    }
+    if (!pin) {
+      return res.status(400).json({ error: '6-digit PIN is required' });
+    }
+
+    const cleanIdentifier = cleanId.toLowerCase();
+    const cleanPhone = cleanId.replace(/\s+/g, '');
+    const user = await UserModel.findOne({
+      $or: [
+        { email: cleanIdentifier },
+        { phone: cleanPhone },
+      ],
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'No account found with this email or phone number' });
+    }
+
+    if (user.status === 'suspended') {
+      return res.status(403).json({ error: 'Your account is suspended. Please contact customer support.' });
+    }
+
+    const isMatch = user.comparePin(pin);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Incorrect 6-digit PIN. Please try again.' });
+    }
+
+    const isSuper = user._id.toString() === MEGA_SUPER_ADMIN_ID || user.role === 'super_admin';
+    const effectiveRole = isSuper ? 'super_admin' : user.role;
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        email: user.email,
+        role: effectiveRole,
+        isMegaSuperAdmin: isSuper,
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const userObj = user.toJSON();
+    if (isSuper) {
+      userObj.role = 'super_admin';
+      userObj.isMegaSuperAdmin = true;
+      userObj.adminTitle = 'Mega Super Admin';
+    }
+
+    res.json({
+      user: userObj,
+      token,
+    });
+  } catch (error: any) {
+    console.error('[PIN Login Error]', error);
+    res.status(500).json({ error: error.message || 'PIN login failed' });
+  }
+});
+
 // 4. Auth: Get Current Profile
 app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
   res.json({ user: req.user.toJSON() });
@@ -276,7 +345,7 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
 // 5. Auth: Update Profile
 app.put('/api/auth/profile', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { fullName, phone, currentPassword, newPassword } = req.body;
+    const { fullName, phone, currentPassword, newPassword, pin, currentPin } = req.body;
     const user = req.user;
 
     if (fullName) user.fullName = fullName.trim();
@@ -293,10 +362,66 @@ app.put('/api/auth/profile', authenticateToken, async (req: AuthRequest, res) =>
       user.password = newPassword;
     }
 
+    if (pin) {
+      const cleanPin = pin.toString().trim();
+      if (!/^\d{6}$/.test(cleanPin)) {
+        return res.status(400).json({ error: 'PIN must be exactly 6 numeric digits' });
+      }
+      if (currentPin) {
+        if (!user.comparePin(currentPin)) {
+          return res.status(400).json({ error: 'Current PIN is incorrect' });
+        }
+      } else if (currentPassword) {
+        const isMatch = await user.comparePassword(currentPassword);
+        if (!isMatch) {
+          return res.status(400).json({ error: 'Current password is incorrect' });
+        }
+      }
+      user.pin = cleanPin;
+    }
+
     await user.save();
     res.json({ user: user.toJSON() });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to update profile' });
+  }
+});
+
+// 5a. Auth: Update / Reset PIN
+app.post('/api/auth/update-pin', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { newPin, currentPin, password } = req.body;
+    const user = req.user;
+
+    if (!newPin || !/^\d{6}$/.test(newPin.toString().trim())) {
+      return res.status(400).json({ error: 'New PIN must be exactly 6 numeric digits' });
+    }
+
+    if (currentPin) {
+      if (!user.comparePin(currentPin)) {
+        return res.status(400).json({ error: 'Current PIN is incorrect' });
+      }
+    } else if (password) {
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+    }
+
+    user.pin = newPin.toString().trim();
+    await user.save();
+
+    await new NotificationModel({
+      userId: user._id.toString(),
+      title: 'Transaction PIN Updated',
+      message: 'Your 6-digit transaction & login PIN has been updated successfully.',
+      type: 'system',
+      read: false,
+    }).save();
+
+    res.json({ success: true, user: user.toJSON() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update PIN' });
   }
 });
 
@@ -492,11 +617,22 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
       phone,
       variationCode,
       subscriptionType,
+      pin,
     } = req.body;
     const user = req.user;
 
     if (!service || !packageName || !smartcardNumber || !customerName) {
       return res.status(400).json({ error: 'Missing subscription details' });
+    }
+
+    // Require & verify 6-digit transaction PIN for payment on cabletv
+    if (user.role === 'customer' || pin !== undefined) {
+      if (!pin) {
+        return res.status(400).json({ error: '6-digit Transaction PIN is required to authorize cable TV payment.' });
+      }
+      if (!user.comparePin(pin)) {
+        return res.status(400).json({ error: 'Incorrect 6-digit Transaction PIN. Please check and try again.' });
+      }
     }
 
     const payAmount = Number(amount);
@@ -600,7 +736,12 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
       });
     }
 
-    // Success or Pending
+    // Success or Pending: Calculate Commission (1.8% on DStv, 2.0% on StarTimes & GOtv via VTpass)
+    const commissionPercentage = service === 'DStv' ? 1.8 : 2.0;
+    const commissionRate = commissionPercentage / 100;
+    const commissionAmount = Number(((payAmount * commissionPercentage) / 100).toFixed(2));
+    const recordedBy = isAuthorizedAdmin(user) ? 'Admin Direct' : (user.fullName || user.email || 'Customer');
+
     const transaction = new TransactionModel({
       transactionReference: txRef,
       userId: user._id.toString(),
@@ -617,8 +758,35 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
       variationCode: finalVarCode,
       purchasedCode: vtpassResult.purchasedCode,
       providerResponse: vtpassResult.providerResponse || 'Signal refreshed. Active on decoder.',
+      commissionRate,
+      commissionPercentage,
+      commissionAmount,
+      recordedBy,
     });
     await transaction.save();
+
+    // Record on Commission Ledger
+    try {
+      await new CommissionModel({
+        transactionId: transaction._id.toString(),
+        transactionReference: txRef,
+        service,
+        package: packageName,
+        smartcardNumber: smartcardNumber.trim(),
+        customerName: customerName.trim(),
+        amount: payAmount,
+        commissionRate,
+        commissionPercentage,
+        commissionAmount,
+        provider: 'VTpass',
+        providerReference: vtpassResult.transactionId || txRef,
+        status: vtpassResult.status,
+        recordedBy,
+        notes: `VTpass Commission: ${commissionPercentage}% on ${service}`,
+      }).save();
+    } catch (commErr: any) {
+      console.warn('[Commission Ledger] Non-blocking record notice:', commErr.message);
+    }
 
     // Wallet Debit Record
     await new WalletTransactionModel({
@@ -1071,6 +1239,128 @@ app.post('/api/admin/customers/:id/status', authenticateToken, async (req: AuthR
   }
 });
 
+// 21b. Admin: Reset Customer PIN to Default 123456
+app.post('/api/admin/customers/:id/reset-pin', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isAuthorizedAdmin(req.user)) {
+      return res.status(403).json({ error: 'Administrative privileges required' });
+    }
+    const customer = await UserModel.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    customer.pin = '123456';
+    await customer.save();
+
+    await new AuditLogModel({
+      adminId: req.user._id.toString(),
+      adminName: req.user.fullName,
+      action: 'ADMIN_PIN_RESET',
+      targetUserId: customer._id.toString(),
+      description: `Admin ${req.user.fullName} reset transaction PIN for ${customer.email} to default (123456).`,
+    }).save();
+
+    await new NotificationModel({
+      userId: customer._id.toString(),
+      title: 'Security Notice: PIN Reset',
+      message: 'Your 6-digit transaction PIN was reset by platform administration to the default PIN (123456). Please change your PIN in your Profile.',
+      type: 'system',
+      read: false,
+    }).save();
+
+    res.json({
+      success: true,
+      defaultPin: '123456',
+      message: `Transaction PIN for ${customer.fullName} successfully reset to default: 123456`,
+      customer: customer.toJSON(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to reset PIN' });
+  }
+});
+
+// 21c. Admin: Manage User Details & Password
+app.put('/api/admin/customers/:id', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isAuthorizedAdmin(req.user)) {
+      return res.status(403).json({ error: 'Administrative privileges required' });
+    }
+    const { fullName, phone, email, role, status, newPassword, pin } = req.body;
+    const customer = await UserModel.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    const changes: string[] = [];
+
+    if (fullName && fullName.trim() !== customer.fullName) {
+      changes.push(`Name changed to "${fullName.trim()}"`);
+      customer.fullName = fullName.trim();
+    }
+
+    if (phone && phone.trim() !== customer.phone) {
+      changes.push(`Phone changed to "${phone.trim()}"`);
+      customer.phone = phone.trim();
+    }
+
+    if (email && email.trim().toLowerCase() !== customer.email) {
+      const cleanEmail = email.trim().toLowerCase();
+      const existing = await UserModel.findOne({ email: cleanEmail, _id: { $ne: customer._id } });
+      if (existing) {
+        return res.status(409).json({ error: 'Another account already uses this email address' });
+      }
+      changes.push(`Email changed to "${cleanEmail}"`);
+      customer.email = cleanEmail;
+    }
+
+    if (role && role !== customer.role) {
+      // Don't demote super admin
+      if (customer._id.toString() !== MEGA_SUPER_ADMIN_ID) {
+        changes.push(`Role changed from ${customer.role} to ${role}`);
+        customer.role = role;
+      }
+    }
+
+    if (status && status !== customer.status) {
+      changes.push(`Status changed from ${customer.status} to ${status}`);
+      customer.status = status;
+    }
+
+    if (newPassword && newPassword.trim()) {
+      changes.push('Password updated by admin');
+      customer.password = newPassword.trim();
+    }
+
+    if (pin && pin.toString().trim()) {
+      const cleanPin = pin.toString().trim();
+      if (!/^\d{6}$/.test(cleanPin)) {
+        return res.status(400).json({ error: 'PIN must be exactly 6 numeric digits' });
+      }
+      changes.push(`PIN updated to ${cleanPin}`);
+      customer.pin = cleanPin;
+    }
+
+    await customer.save();
+
+    await new AuditLogModel({
+      adminId: req.user._id.toString(),
+      adminName: req.user.fullName,
+      action: 'ADMIN_USER_EDIT',
+      targetUserId: customer._id.toString(),
+      description: `Admin updated account for ${customer.email}: ${changes.join(', ') || 'No significant field changes'}`,
+    }).save();
+
+    res.json({
+      success: true,
+      message: `Account details for ${customer.fullName} updated successfully.`,
+      customer: customer.toJSON(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update user details' });
+  }
+});
+
 // 22. Admin: Audit Logs
 app.get('/api/admin/audit-logs', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -1219,6 +1509,271 @@ app.post('/api/admin/transactions/:id/requery', authenticateToken, async (req: A
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'VTpass requery failed' });
+  }
+});
+
+// 26. Admin: Get VTpass Commissions & Real-time Ledger
+app.get('/api/admin/commissions', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isAuthorizedAdmin(req.user)) {
+      return res.status(403).json({ error: 'Administrative privileges required' });
+    }
+
+    const { service, status, search, startDate, endDate } = req.query;
+
+    // Check if we need to backfill commission records for any existing transactions
+    const totalTxCount = await TransactionModel.countDocuments();
+    const totalCommCount = await CommissionModel.countDocuments();
+
+    if (totalCommCount < totalTxCount) {
+      const unrecordedTxs = await TransactionModel.find();
+      for (const tx of unrecordedTxs) {
+        const exists = await CommissionModel.findOne({ transactionReference: tx.transactionReference });
+        if (!exists) {
+          const commPct = tx.service === 'DStv' ? 1.8 : 2.0;
+          const commRate = commPct / 100;
+          const commAmt = Number(((tx.amount * commPct) / 100).toFixed(2));
+          await new CommissionModel({
+            transactionId: tx._id.toString(),
+            transactionReference: tx.transactionReference,
+            service: tx.service,
+            package: tx.package,
+            smartcardNumber: tx.smartcardNumber,
+            customerName: tx.customerName || 'Subscriber',
+            amount: tx.amount,
+            commissionRate: commRate,
+            commissionPercentage: commPct,
+            commissionAmount: commAmt,
+            provider: 'VTpass',
+            providerReference: tx.providerReference || tx.transactionReference,
+            status: tx.status,
+            recordedBy: tx.recordedBy || 'System Backfill',
+            notes: `VTpass Commission: ${commPct}% on ${tx.service}`,
+            createdAt: tx.createdAt,
+          }).save();
+        }
+      }
+    }
+
+    const query: any = {};
+    if (service && service !== 'all') query.service = service;
+    if (status && status !== 'all') query.status = status;
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.trim();
+      query.$or = [
+        { customerName: { $regex: q, $options: 'i' } },
+        { smartcardNumber: { $regex: q, $options: 'i' } },
+        { transactionReference: { $regex: q, $options: 'i' } },
+        { package: { $regex: q, $options: 'i' } },
+      ];
+    }
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate as string);
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    const commissions = await CommissionModel.find(query).sort({ createdAt: -1 });
+
+    // Aggregate summary stats across all commission records
+    const allCommissions = await CommissionModel.find();
+
+    const summary = {
+      totalCommissionEarned: 0,
+      dstvCommission: 0,
+      dstvVolume: 0,
+      dstvCount: 0,
+      gotvCommission: 0,
+      gotvVolume: 0,
+      gotvCount: 0,
+      startimesCommission: 0,
+      startimesVolume: 0,
+      startimesCount: 0,
+      totalTransactionsCount: allCommissions.length,
+      totalVolume: 0,
+    };
+
+    for (const c of allCommissions) {
+      if (c.status === 'SUCCESSFUL' || c.status === 'PENDING') {
+        summary.totalCommissionEarned += c.commissionAmount || 0;
+        summary.totalVolume += c.amount || 0;
+
+        if (c.service === 'DStv') {
+          summary.dstvCommission += c.commissionAmount || 0;
+          summary.dstvVolume += c.amount || 0;
+          summary.dstvCount += 1;
+        } else if (c.service === 'GOtv') {
+          summary.gotvCommission += c.commissionAmount || 0;
+          summary.gotvVolume += c.amount || 0;
+          summary.gotvCount += 1;
+        } else if (c.service === 'StarTimes') {
+          summary.startimesCommission += c.commissionAmount || 0;
+          summary.startimesVolume += c.amount || 0;
+          summary.startimesCount += 1;
+        }
+      }
+    }
+
+    summary.totalCommissionEarned = Number(summary.totalCommissionEarned.toFixed(2));
+    summary.dstvCommission = Number(summary.dstvCommission.toFixed(2));
+    summary.gotvCommission = Number(summary.gotvCommission.toFixed(2));
+    summary.startimesCommission = Number(summary.startimesCommission.toFixed(2));
+
+    res.json({
+      success: true,
+      commissions: commissions.map((c) => c.toJSON()),
+      summary,
+    });
+  } catch (error: any) {
+    console.error('[Admin Commissions Error]', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch commission ledger' });
+  }
+});
+
+// 27. Admin: Direct Cable Payment from Admin Dashboard (Automatically Records Commission)
+app.post('/api/admin/cable-pay', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isAuthorizedAdmin(req.user)) {
+      return res.status(403).json({ error: 'Administrative privileges required' });
+    }
+
+    const {
+      service,
+      package: packageName,
+      smartcardNumber,
+      customerName,
+      amount,
+      phone,
+      variationCode,
+      subscriptionType,
+      notes,
+    } = req.body;
+
+    if (!service || !packageName || !smartcardNumber || !customerName) {
+      return res.status(400).json({ error: 'Missing mandatory cable payment parameters' });
+    }
+
+    const payAmount = Number(amount);
+    if (!payAmount || payAmount <= 0) {
+      return res.status(400).json({ error: 'Valid payment amount is required' });
+    }
+
+    const txRef = `JDPAY-ADM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Resolve variation code if not provided
+    let finalVarCode = variationCode;
+    if (!finalVarCode) {
+      const pkgDoc = await CablePackageModel.findOne({
+        service,
+        $or: [{ packageName }, { name: packageName }],
+      });
+      if (pkgDoc && pkgDoc.variationCode) {
+        finalVarCode = pkgDoc.variationCode;
+      }
+    }
+
+    console.log(`[Admin Cable Pay] Processing ${service} subscription for ${customerName} (${smartcardNumber})`, {
+      admin: req.user.fullName,
+      variationCode: finalVarCode,
+      amount: payAmount,
+      subscriptionType,
+    });
+
+    let vtpassResult: any;
+    try {
+      vtpassResult = await purchaseDstvSubscription({
+        billersCode: smartcardNumber,
+        serviceID: service.toLowerCase() as any,
+        variationCode: finalVarCode,
+        amount: payAmount,
+        phone: phone || req.user.phone || '08012345678',
+        subscriptionType: subscriptionType === 'renew' ? 'renew' : 'change',
+        quantity: 1,
+      });
+    } catch (err: any) {
+      console.error('[Admin VTpass Call Failed]:', err.message);
+      vtpassResult = {
+        success: false,
+        status: 'FAILED',
+        failureReason: err.message || 'VTpass network timeout',
+      };
+    }
+
+    // Commission Rule: 1.8% on DStv, 2.0% on StarTimes & GOtv via VTpass
+    const commissionPercentage = service === 'DStv' ? 1.8 : 2.0;
+    const commissionRate = commissionPercentage / 100;
+    const commissionAmount = Number(((payAmount * commissionPercentage) / 100).toFixed(2));
+    const recordedBy = `Admin: ${req.user.fullName} (${req.user.email})`;
+
+    const txStatus = vtpassResult.status || (vtpassResult.success ? 'SUCCESSFUL' : 'FAILED');
+
+    // Create Transaction Record
+    const transaction = new TransactionModel({
+      transactionReference: txRef,
+      userId: req.user._id.toString(),
+      customerName: customerName.trim(),
+      service,
+      package: packageName,
+      smartcardNumber: smartcardNumber.trim(),
+      amount: payAmount,
+      serviceFee: 0,
+      totalAmount: payAmount,
+      status: txStatus,
+      providerReference: vtpassResult.transactionId || txRef,
+      requestId: vtpassResult.requestId,
+      variationCode: finalVarCode,
+      purchasedCode: vtpassResult.purchasedCode,
+      providerResponse: vtpassResult.providerResponse || 'Signal refreshed. Active on decoder via Admin Portal.',
+      failureReason: vtpassResult.failureReason,
+      commissionRate,
+      commissionPercentage,
+      commissionAmount,
+      recordedBy,
+    });
+    await transaction.save();
+
+    // Create Commission Record
+    const commission = new CommissionModel({
+      transactionId: transaction._id.toString(),
+      transactionReference: txRef,
+      service,
+      package: packageName,
+      smartcardNumber: smartcardNumber.trim(),
+      customerName: customerName.trim(),
+      amount: payAmount,
+      commissionRate,
+      commissionPercentage,
+      commissionAmount,
+      provider: 'VTpass',
+      providerReference: vtpassResult.transactionId || txRef,
+      status: txStatus,
+      recordedBy,
+      notes: notes || `Direct Admin Payment via VTpass: ${commissionPercentage}% on ${service}`,
+    });
+    await commission.save();
+
+    // Audit Log
+    await new AuditLogModel({
+      adminId: req.user._id.toString(),
+      adminName: req.user.fullName,
+      action: 'ADMIN_CABLE_PAYMENT_PROCESSED',
+      transactionId: txRef,
+      description: `Admin executed direct ${service} payment of ₦${payAmount.toLocaleString('en-NG')} for ${customerName} (${smartcardNumber}). Commission recorded: ₦${commissionAmount.toLocaleString('en-NG')} (${commissionPercentage}%). Status: ${txStatus}`,
+    }).save();
+
+    res.status(201).json({
+      success: txStatus === 'SUCCESSFUL' || txStatus === 'PENDING',
+      transaction: transaction.toJSON(),
+      commission: commission.toJSON(),
+      vtpassResult,
+    });
+  } catch (error: any) {
+    console.error('[Admin Cable Pay Error]', error);
+    res.status(500).json({ error: error.message || 'Direct admin payment processing failed' });
   }
 });
 
