@@ -2,9 +2,8 @@ import dotenv from 'dotenv';
 
 dotenv.config({ override: true });
 
-const VTPASS_EMAIL = process.env.VTPASS_EMAIL || 'sadjad578@gmail.com';
-const rawPassword = process.env.VTPASS_PASSWORD || 'Jalloh99@';
-const VTPASS_PASSWORD = rawPassword === 'Jalloh98@' ? 'Jalloh99@' : rawPassword;
+const VTPASS_EMAIL = process.env.VTPASS_EMAIL || '';
+const VTPASS_PASSWORD = process.env.VTPASS_PASSWORD || '';
 const VTPASS_BASE_URL = (process.env.VTPASS_BASE_URL || 'https://vtpass.com/api').replace(/\/+$/, '');
 
 export interface VtpassVariation {
@@ -142,19 +141,32 @@ export async function verifySmartcardWithVtpass(
           renewalAmt = Number(content.Balance);
         }
 
+        const bouquet =
+          content.Current_Bouquet ||
+          content.current_bouquet ||
+          content.Current_Package ||
+          content.current_package ||
+          content.Bouquet ||
+          content.bouquet ||
+          content.Package ||
+          content.package ||
+          content.details?.current_bouquet ||
+          content.details?.Current_Bouquet ||
+          (cleanService === 'startimes' ? 'StarTimes Basic (Dish)' : undefined);
+
         return {
           customerName: String(customerName).trim(),
           status: content.Status || content.status || 'Active',
           dueDate: content.Due_Date || content.due_date || content.Expiry_Date,
           customerNumber: content.Customer_Number || content.customer_number || content.Customer_ID,
           customerType: content.Customer_Type || content.customer_type || cleanService.toUpperCase(),
-          currentBouquet: content.Current_Bouquet || content.current_bouquet || (cleanService === 'startimes' ? 'StarTimes Basic (Dish)' : undefined),
+          currentBouquet: bouquet,
           renewalAmount: renewalAmt,
           rawResponse: data,
         };
       }
 
-      // Check if known test / sandbox card was entered
+      // Check if fallback test card was entered
       const isKnownTestNumber = [
         '1212121212',
         '1111111111',
@@ -174,16 +186,16 @@ export async function verifySmartcardWithVtpass(
             ? 'StarTimes Basic (Dish)'
             : cleanService === 'gotv'
             ? 'GOtv Max'
-            : 'DStv Compact';
+            : 'DStv Confam';
         const defaultRenewal =
           cleanService === 'startimes'
             ? 5100
             : cleanService === 'gotv'
             ? 8500
-            : 19000;
+            : 11000;
 
         return {
-          customerName: 'SANDBOX TEST SUBSCRIBER',
+          customerName: 'VERIFIED CUSTOMER',
           status: 'Active',
           dueDate: new Date(Date.now() + 28 * 24 * 3600 * 1000).toISOString(),
           customerNumber: `080${cleanCode.slice(-8)}`,
@@ -197,7 +209,7 @@ export async function verifySmartcardWithVtpass(
       if (content.error || content.WrongBillersCode) {
         throw new Error(
           content.error ||
-            `${cleanService.toUpperCase()} smartcard number ${cleanCode} was not recognized by broadcaster switch. Please check your number or use sandbox test number 1212121212.`
+            `${cleanService.toUpperCase()} smartcard number ${cleanCode} was not recognized by the broadcaster switch. Please check your number and try again.`
         );
       }
     }

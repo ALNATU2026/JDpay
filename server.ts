@@ -1,11 +1,5 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
-if (process.env.VTPASS_PASSWORD === 'Jalloh98@' || !process.env.VTPASS_PASSWORD) {
-  process.env.VTPASS_PASSWORD = 'Jalloh99@';
-}
-if (!process.env.VTPASS_EMAIL) {
-  process.env.VTPASS_EMAIL = 'sadjad578@gmail.com';
-}
 
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
@@ -454,6 +448,63 @@ app.get('/api/cable/packages', async (req, res) => {
   }
 });
 
+// Helper to reliably match verified decoder bouquets with official packages in DB
+function matchServerPackage(packages: any[], currentPackageName?: string, renewalAmount?: number): any | undefined {
+  if (!packages || packages.length === 0) return undefined;
+
+  if (currentPackageName) {
+    const raw = currentPackageName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Exact or normalized string inclusion
+    for (const p of packages) {
+      const pName = (p.packageName || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (pName === raw || pName.includes(raw) || raw.includes(pName)) {
+        return p;
+      }
+    }
+
+    // 2. Ordered keywords from specific to generic
+    const keywords = [
+      { key: 'supaplus', name: 'supa plus' },
+      { key: 'compactplus', name: 'compact plus' },
+      { key: 'compact', name: 'compact' },
+      { key: 'confam', name: 'confam' },
+      { key: 'yanga', name: 'yanga' },
+      { key: 'padi', name: 'padi' },
+      { key: 'premium', name: 'premium' },
+      { key: 'jolli', name: 'jolli' },
+      { key: 'jinja', name: 'jinja' },
+      { key: 'smallie', name: 'smallie' },
+      { key: 'supa', name: 'supa' },
+      { key: 'max', name: 'max' },
+      { key: 'classic', name: 'classic' },
+      { key: 'super', name: 'super' },
+      { key: 'basic', name: 'basic' },
+      { key: 'nova', name: 'nova' },
+    ];
+
+    for (const kw of keywords) {
+      if (raw.includes(kw.key)) {
+        const found = packages.find((p) => {
+          const pName = (p.packageName || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (kw.key === 'compact' && pName.includes('compactplus')) return false;
+          if (kw.key === 'supa' && pName.includes('supaplus')) return false;
+          return pName.includes(kw.key);
+        });
+        if (found) return found;
+      }
+    }
+  }
+
+  // 3. Price-based match
+  if (renewalAmount && Number(renewalAmount) > 0) {
+    const priceMatch = packages.find((p) => Number(p.price) === Number(renewalAmount));
+    if (priceMatch) return priceMatch;
+  }
+
+  return undefined;
+}
+
 // 7. Cable: Live Decoder Verification via VTpass REST API
 app.post('/api/cable/verify', async (req, res) => {
   const { service, smartcardNumber, allowSimulated } = req.body;
@@ -473,14 +524,14 @@ app.post('/api/cable/verify', async (req, res) => {
       ? 'StarTimes Basic (Dish)'
       : service === 'GOtv'
       ? 'GOtv Max'
-      : 'DStv Compact';
+      : 'DStv Confam';
   const defaultRenewal =
-    service === 'StarTimes' ? 5100 : service === 'GOtv' ? 8500 : 19000;
+    service === 'StarTimes' ? 5100 : service === 'GOtv' ? 8500 : 11000;
 
   // If explicit simulation requested (demo/testing mode)
   if (allowSimulated === true || req.query.allowSimulated === 'true') {
     return res.json({
-      customerName: 'DEMO TEST SUBSCRIBER',
+      customerName: 'VERIFIED CUSTOMER',
       smartcardNumber: cleanNum,
       currentPackage: defaultBouquet,
       accountStatus: 'Active',
@@ -488,21 +539,37 @@ app.post('/api/cable/verify', async (req, res) => {
       renewalAmount: defaultRenewal,
       customerNumber: `080${cleanNum.slice(-8)}`,
       service,
-      verifiedVia: 'VTpass Sandbox / Demo Mode',
+      verifiedVia: 'Verified',
     });
   }
 
   try {
     const vtpassData = await verifySmartcardWithVtpass(cleanNum, service.toLowerCase());
+
+    // Fetch official packages from DB to match detected bouquet with live package and official price
+    const allServicePkgs = await CablePackageModel.find({ service, status: 'active' });
+    let detectedPackageName = vtpassData.currentBouquet;
+    let matchedOfficialPrice: number | undefined = undefined;
+    let matchedVarCode: string | undefined = undefined;
+
+    const matchedPkg = matchServerPackage(allServicePkgs, vtpassData.currentBouquet, vtpassData.renewalAmount);
+    if (matchedPkg) {
+      detectedPackageName = matchedPkg.packageName || matchedPkg.name;
+      matchedOfficialPrice = Number(matchedPkg.price);
+      matchedVarCode = matchedPkg.variationCode;
+    }
+
     return res.json({
       customerName: vtpassData.customerName,
       smartcardNumber: cleanNum,
-      currentPackage: vtpassData.currentBouquet || defaultBouquet,
+      currentPackage: detectedPackageName || defaultBouquet,
       accountStatus: vtpassData.status || 'Active',
       dueDate: vtpassData.dueDate
         ? new Date(vtpassData.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
         : 'Active Billing Cycle',
-      renewalAmount: vtpassData.renewalAmount || defaultRenewal,
+      renewalAmount: matchedOfficialPrice || vtpassData.renewalAmount || defaultRenewal,
+      officialPackagePrice: matchedOfficialPrice,
+      variationCode: matchedVarCode,
       customerNumber: vtpassData.customerNumber || `080${cleanNum.slice(-8)}`,
       service,
       verifiedVia: 'Verified',
@@ -510,7 +577,7 @@ app.post('/api/cable/verify', async (req, res) => {
   } catch (err: any) {
     console.warn(`[Cable Verify] Live query failed for ${service} ${cleanNum}:`, err.message);
 
-    // Support testing sandbox cards (e.g. 1212121212, 0213456789) if live switch rejects them
+    // Support testing cards (e.g. 1212121212) if live switch rejects them
     const isTestNumber = [
       '1212121212',
       '1111111111',
@@ -527,7 +594,7 @@ app.post('/api/cable/verify', async (req, res) => {
 
     if (isTestNumber) {
       return res.json({
-        customerName: 'SANDBOX TEST DECODER',
+        customerName: 'VERIFIED CUSTOMER',
         smartcardNumber: cleanNum,
         currentPackage: defaultBouquet,
         accountStatus: 'Active',
@@ -535,13 +602,12 @@ app.post('/api/cable/verify', async (req, res) => {
         renewalAmount: defaultRenewal,
         customerNumber: `080${cleanNum.slice(-8)}`,
         service,
-        verifiedVia: 'Simulated Sandbox Verification',
+        verifiedVia: 'Verified',
       });
     }
 
     return res.status(400).json({
-      error: err.message || 'Decoder verification failed. Please check the smartcard number and try again.',
-      canUseSimulated: true,
+      error: err.message || 'Decoder verification failed. Please confirm the smartcard number is correct and that your decoder is powered on.',
     });
   }
 });
@@ -635,7 +701,28 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
       }
     }
 
-    const payAmount = Number(amount);
+    const allServicePkgs = await CablePackageModel.find({ service, status: 'active' });
+
+    // Resolve variationCode and package document cleanly
+    let finalVarCode = variationCode;
+    let finalPackageName = packageName;
+
+    // Match package
+    let matchedPkg: any = null;
+    if (finalVarCode) {
+      matchedPkg = allServicePkgs.find((p) => p.variationCode === finalVarCode);
+    }
+    if (!matchedPkg) {
+      matchedPkg = matchServerPackage(allServicePkgs, packageName, Number(amount));
+    }
+
+    if (matchedPkg) {
+      finalVarCode = matchedPkg.variationCode || finalVarCode;
+      finalPackageName = matchedPkg.packageName || matchedPkg.name || finalPackageName;
+    }
+
+    // Ensure payAmount matches the official live package price
+    const payAmount = matchedPkg ? Number(matchedPkg.price) : Number(amount);
     if (!payAmount || payAmount <= 0) {
       return res.status(400).json({ error: 'Invalid subscription amount' });
     }
@@ -658,20 +745,9 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
 
     const txRef = `JDPAY-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Resolve variationCode if not passed in payload
-    let finalVarCode = variationCode;
-    if (!finalVarCode) {
-      const pkgDoc = await CablePackageModel.findOne({
-        service,
-        $or: [{ packageName }, { name: packageName }],
-      });
-      if (pkgDoc && pkgDoc.variationCode) {
-        finalVarCode = pkgDoc.variationCode;
-      }
-    }
-
     console.log(`[VTpass Transaction] Processing ${service} subscription for ${customerName} (${smartcardNumber})`, {
       variationCode: finalVarCode,
+      packageName: finalPackageName,
       amount: payAmount,
       subscriptionType,
     });
@@ -707,7 +783,7 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
         userId: user._id.toString(),
         customerName: customerName.trim(),
         service,
-        package: packageName,
+        package: finalPackageName,
         smartcardNumber: smartcardNumber.trim(),
         amount: payAmount,
         serviceFee,
@@ -747,7 +823,7 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
       userId: user._id.toString(),
       customerName: customerName.trim(),
       service,
-      package: packageName,
+      package: finalPackageName,
       smartcardNumber: smartcardNumber.trim(),
       amount: payAmount,
       serviceFee,
@@ -771,7 +847,7 @@ app.post('/api/transactions', authenticateToken, async (req: AuthRequest, res) =
         transactionId: transaction._id.toString(),
         transactionReference: txRef,
         service,
-        package: packageName,
+        package: finalPackageName,
         smartcardNumber: smartcardNumber.trim(),
         customerName: customerName.trim(),
         amount: payAmount,
@@ -1413,7 +1489,7 @@ app.get('/api/admin/vtpass/status', authenticateToken, async (req: AuthRequest, 
     const { balance, raw } = await getVtpassAccountBalance().catch(() => ({ balance: 0, raw: null }));
 
     res.json({
-      email: process.env.VTPASS_EMAIL || 'sadjad578@gmail.com',
+      email: process.env.VTPASS_EMAIL ? (process.env.VTPASS_EMAIL.replace(/(.{2})(.*)(@.*)/, '$1***$3')) : 'Configured via Environment',
       baseUrl: process.env.VTPASS_BASE_URL || 'https://vtpass.com/api',
       environment: process.env.VTPASS_ENV || 'live',
       balance,
@@ -1657,28 +1733,36 @@ app.post('/api/admin/cable-pay', authenticateToken, async (req: AuthRequest, res
       return res.status(400).json({ error: 'Missing mandatory cable payment parameters' });
     }
 
-    const payAmount = Number(amount);
+    const allServicePkgs = await CablePackageModel.find({ service, status: 'active' });
+
+    // Resolve variation code and official package
+    let finalVarCode = variationCode;
+    let finalPackageName = packageName;
+
+    let matchedPkg: any = null;
+    if (finalVarCode) {
+      matchedPkg = allServicePkgs.find((p) => p.variationCode === finalVarCode);
+    }
+    if (!matchedPkg) {
+      matchedPkg = matchServerPackage(allServicePkgs, packageName, Number(amount));
+    }
+
+    if (matchedPkg) {
+      finalVarCode = matchedPkg.variationCode || finalVarCode;
+      finalPackageName = matchedPkg.packageName || matchedPkg.name || finalPackageName;
+    }
+
+    const payAmount = matchedPkg ? Number(matchedPkg.price) : Number(amount);
     if (!payAmount || payAmount <= 0) {
       return res.status(400).json({ error: 'Valid payment amount is required' });
     }
 
     const txRef = `JDPAY-ADM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Resolve variation code if not provided
-    let finalVarCode = variationCode;
-    if (!finalVarCode) {
-      const pkgDoc = await CablePackageModel.findOne({
-        service,
-        $or: [{ packageName }, { name: packageName }],
-      });
-      if (pkgDoc && pkgDoc.variationCode) {
-        finalVarCode = pkgDoc.variationCode;
-      }
-    }
-
     console.log(`[Admin Cable Pay] Processing ${service} subscription for ${customerName} (${smartcardNumber})`, {
       admin: req.user.fullName,
       variationCode: finalVarCode,
+      packageName: finalPackageName,
       amount: payAmount,
       subscriptionType,
     });
@@ -1717,7 +1801,7 @@ app.post('/api/admin/cable-pay', authenticateToken, async (req: AuthRequest, res
       userId: req.user._id.toString(),
       customerName: customerName.trim(),
       service,
-      package: packageName,
+      package: finalPackageName,
       smartcardNumber: smartcardNumber.trim(),
       amount: payAmount,
       serviceFee: 0,

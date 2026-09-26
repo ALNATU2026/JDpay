@@ -14,9 +14,13 @@ export interface PayCablePayload {
   customerName: string;
   service: CableServiceName;
   packageId: string;
+  packageName?: string;
+  variationCode?: string;
+  amount?: number;
   smartcardNumber: string;
   phone?: string;
   subscriptionType?: 'change' | 'renew';
+  pin?: string;
 }
 
 export const cableService = {
@@ -61,7 +65,7 @@ export const cableService = {
 
   getPackageById: (packageId: string): CablePackage | undefined => {
     const packages = storage.getPackages();
-    return packages.find((p) => p.id === packageId);
+    return packages.find((p) => p.id === packageId || p.variationCode === packageId);
   },
 
   verifyCustomer: async (
@@ -143,21 +147,26 @@ export const cableService = {
 
   processCablePayment: async (payload: PayCablePayload): Promise<Transaction> => {
     const selectedPkg = cableService.getPackageById(payload.packageId);
-    if (!selectedPkg) {
-      throw new Error('Selected package does not exist or has been discontinued.');
+    const finalAmount = payload.amount || (selectedPkg ? selectedPkg.price : 0);
+    const finalPackageName = payload.packageName || (selectedPkg ? selectedPkg.packageName : 'Cable TV Bouquet');
+    const finalVariationCode = payload.variationCode || (selectedPkg ? selectedPkg.variationCode : undefined);
+
+    if (!finalAmount || finalAmount <= 0) {
+      throw new Error('Invalid subscription amount for the selected package.');
     }
 
     // 1. Attempt live VTpass backend transaction & switch fulfillment
     try {
       const res = await api.transactions.payCable({
         service: payload.service,
-        package: selectedPkg.packageName,
+        package: finalPackageName,
         smartcardNumber: payload.smartcardNumber,
         customerName: payload.customerName,
-        amount: selectedPkg.price,
+        amount: finalAmount,
         phone: payload.phone,
-        variationCode: selectedPkg.variationCode,
+        variationCode: finalVariationCode,
         subscriptionType: payload.subscriptionType || 'change',
+        pin: payload.pin,
       });
 
       if (res && res.success && res.transaction) {

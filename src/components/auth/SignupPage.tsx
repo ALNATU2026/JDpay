@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, User, Mail, Phone, Lock, Tag, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, User, Mail, Phone, Lock, Tag, ArrowRight, CheckCircle2, KeyRound, ShieldCheck } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { User as UserModel } from '../../types';
+import { ThemeToggle } from '../common/ThemeToggle';
 
 interface SignupPageProps {
   onNavigate: (path: string) => void;
@@ -15,11 +16,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
     phone: '',
     password: '',
     confirmPassword: '',
+    pin: '',
+    confirmPin: '',
     referralCode: '',
     agreeTerms: false,
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [success, setSuccess] = useState(false);
@@ -38,6 +42,17 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
       return;
     }
 
+    const cleanPin = formData.pin.trim();
+    if (!cleanPin || !/^\d{6}$/.test(cleanPin)) {
+      setErrorMessage('Payment PIN must be exactly 6 numeric digits (e.g. 123456).');
+      return;
+    }
+
+    if (cleanPin !== formData.confirmPin.trim()) {
+      setErrorMessage('Payment PIN confirmation does not match. Please verify both 6 digits.');
+      return;
+    }
+
     if (!formData.agreeTerms) {
       setErrorMessage('You must agree to the Terms & Conditions and Privacy Policy to proceed.');
       return;
@@ -51,6 +66,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
         email: formData.email,
         phone: formData.phone,
         password: formData.password,
+        pin: cleanPin,
         referralCode: formData.referralCode,
       });
 
@@ -66,24 +82,28 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
   };
 
   return (
-    <div className="min-h-[calc(100vh-72px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50">
-      <div className="max-w-lg w-full space-y-6 bg-white p-8 rounded-2xl border border-slate-200 shadow-xl">
+    <div className="min-h-[calc(100vh-72px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 dark:bg-slate-950 transition-colors">
+      <div className="max-w-lg w-full space-y-6 bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl transition-colors relative">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
+
         {/* Brand Header */}
         <div className="text-center">
           <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-xs">
             JD
           </div>
-          <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-900">
+          <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
             Create Your JDpay Account
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Pay Your Cable TV. Simple. Fast. Secure.
           </p>
         </div>
 
         {/* Success Alert */}
         {success && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs rounded-xl flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <span>Account created successfully! Loading your personal customer dashboard...</span>
           </div>
@@ -91,7 +111,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-xl">
             {errorMessage}
           </div>
         )}
@@ -99,7 +119,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
         {/* Signup Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Full Name *
             </label>
             <div className="relative">
@@ -112,14 +132,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 placeholder="e.g. Babatunde Adeyemi"
-                className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Email Address *
               </label>
               <div className="relative">
@@ -132,13 +152,13 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="babatunde@example.com"
-                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Phone Number *
               </label>
               <div className="relative">
@@ -151,15 +171,16 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="080 1234 5678"
-                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
               </div>
             </div>
           </div>
 
+          {/* Password & Confirm Password */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Password *
               </label>
               <div className="relative">
@@ -172,12 +193,12 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full pl-9.5 pr-9 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  className="w-full pl-9.5 pr-9 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-hidden"
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-hidden"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
@@ -185,7 +206,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Confirm Password *
               </label>
               <div className="relative">
@@ -198,14 +219,88 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
               </div>
             </div>
           </div>
 
+          {/* 6-Digit Payment / Transaction PIN Section */}
+          <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  6-Digit Payment PIN (For Cable TV Payment Verification) *
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {showPin ? 'Hide PIN' : 'Show PIN'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+              You will enter this 6-digit PIN to authorize Cable TV subscriptions (DStv, GOtv, StarTimes) and for instant quick login.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  6-Digit PIN *
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    required
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={formData.pin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setFormData({ ...formData, pin: val });
+                    }}
+                    placeholder="123456"
+                    className="w-full pl-9.5 pr-3 py-2.5 text-xs font-mono tracking-widest rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Confirm 6-Digit PIN *
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    required
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={formData.confirmPin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setFormData({ ...formData, confirmPin: val });
+                    }}
+                    placeholder="123456"
+                    className="w-full pl-9.5 pr-3 py-2.5 text-xs font-mono tracking-widest rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Referral Code (Optional)
             </label>
             <div className="relative">
@@ -217,23 +312,23 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
                 value={formData.referralCode}
                 onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
                 placeholder="e.g. REF-JDPAY88"
-                className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 uppercase"
+                className="w-full pl-9.5 pr-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 uppercase"
               />
             </div>
           </div>
 
           <div className="pt-1">
-            <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-600">
+            <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-400">
               <input
                 type="checkbox"
                 required
                 checked={formData.agreeTerms}
                 onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })}
-                className="mt-0.5 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                className="mt-0.5 w-4 h-4 rounded text-blue-600 border-slate-300 dark:border-slate-700 focus:ring-blue-500"
               />
               <span>
-                I agree to the <span className="text-blue-600 font-semibold">Terms & Conditions</span> and{' '}
-                <span className="text-blue-600 font-semibold">Privacy Policy</span>.
+                I agree to the <span className="text-blue-600 dark:text-blue-400 font-semibold">Terms & Conditions</span> and{' '}
+                <span className="text-blue-600 dark:text-blue-400 font-semibold">Privacy Policy</span>.
               </span>
             </label>
           </div>
@@ -241,7 +336,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
           <button
             type="submit"
             disabled={isLoading || success}
-            className="w-full py-3 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {isLoading ? (
               <span className="inline-block animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
@@ -255,13 +350,13 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSucc
         </form>
 
         {/* Footer Link */}
-        <div className="text-center pt-2 border-t border-slate-100">
-          <p className="text-xs text-slate-500">
+        <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Already have an account?{' '}
             <button
               type="button"
               onClick={() => onNavigate('/login')}
-              className="text-blue-600 font-bold hover:underline"
+              className="text-blue-600 dark:text-blue-400 font-bold hover:underline"
             >
               Login
             </button>

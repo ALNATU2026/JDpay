@@ -7,6 +7,7 @@ export interface RegisterPayload {
   email: string;
   phone: string;
   password: string;
+  pin?: string;
   referralCode?: string;
 }
 
@@ -34,6 +35,8 @@ export const authService = {
           walletBalance: res.user.walletBalance,
           status: res.user.status,
           virtualAccount: res.user.virtualAccount,
+          pin: res.user.pin || '123456',
+          hasPin: true,
           createdAt: res.user.createdAt,
           updatedAt: res.user.updatedAt,
         };
@@ -82,6 +85,104 @@ export const authService = {
     return found;
   },
 
+  loginPin: async (identifier: string, pin: string): Promise<User> => {
+    try {
+      const res = await api.auth.loginPin({ identifier, pin });
+      if (res && res.user && res.token) {
+        setToken(res.token);
+        const userId = res.user.id || res.user._id;
+        const isMega = userId === '6ab44acc7b6a361d8a96eb74' || res.user.isMegaSuperAdmin === true || res.user.role === 'super_admin';
+        const mappedUser: User = {
+          id: userId,
+          fullName: res.user.fullName,
+          email: res.user.email,
+          phone: res.user.phone,
+          role: isMega ? 'super_admin' : res.user.role,
+          isMegaSuperAdmin: isMega,
+          adminTitle: res.user.adminTitle || (isMega ? 'Mega Super Admin' : undefined),
+          walletBalance: res.user.walletBalance,
+          status: res.user.status,
+          virtualAccount: res.user.virtualAccount,
+          pin: res.user.pin || pin,
+          hasPin: true,
+          createdAt: res.user.createdAt,
+          updatedAt: res.user.updatedAt,
+        };
+        storage.saveCurrentUser(mappedUser);
+        return mappedUser;
+      }
+    } catch (err: any) {
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('incorrect 6-digit pin') || msg.includes('no account found') || msg.includes('suspended')) {
+        throw err;
+      }
+      console.warn('[AuthService] Live PIN login unavailable, falling back:', err.message);
+    }
+
+    // Local fallback
+    const users = storage.getUsers();
+    const cleanId = identifier.trim().toLowerCase();
+    const found = users.find(
+      (u) =>
+        u.email.toLowerCase() === cleanId ||
+        u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')
+    );
+
+    if (!found) {
+      throw new Error('No registered account found with this email or phone number.');
+    }
+
+    if (found.status === 'suspended') {
+      throw new Error('This account has been suspended by administration.');
+    }
+
+    const expectedPin = found.pin || '123456';
+    if (expectedPin !== pin) {
+      throw new Error('Incorrect 6-digit PIN. Please try again.');
+    }
+
+    storage.saveCurrentUser(found);
+    return found;
+  },
+
+  updatePin: async (payload: { newPin: string; currentPin?: string; password?: string }): Promise<User> => {
+    try {
+      const res = await api.auth.updatePin(payload);
+      if (res && res.user) {
+        const userId = res.user.id || res.user._id;
+        const isMega = userId === '6ab44acc7b6a361d8a96eb74' || res.user.isMegaSuperAdmin === true || res.user.role === 'super_admin';
+        const mappedUser: User = {
+          id: userId,
+          fullName: res.user.fullName,
+          email: res.user.email,
+          phone: res.user.phone,
+          role: isMega ? 'super_admin' : res.user.role,
+          isMegaSuperAdmin: isMega,
+          adminTitle: res.user.adminTitle || (isMega ? 'Mega Super Admin' : undefined),
+          walletBalance: res.user.walletBalance,
+          status: res.user.status,
+          virtualAccount: res.user.virtualAccount,
+          pin: res.user.pin || payload.newPin,
+          hasPin: true,
+          createdAt: res.user.createdAt,
+          updatedAt: res.user.updatedAt,
+        };
+        storage.saveCurrentUser(mappedUser);
+        return mappedUser;
+      }
+    } catch (err: any) {
+      console.warn('[AuthService] Live update PIN error, trying fallback:', err.message);
+      throw err;
+    }
+
+    const current = storage.getCurrentUser();
+    if (!current) throw new Error('Not logged in');
+    current.pin = payload.newPin;
+    current.hasPin = true;
+    storage.saveCurrentUser(current);
+    return current;
+  },
+
   register: async (payload: RegisterPayload): Promise<User> => {
     try {
       // 1. Attempt live MongoDB backend registration
@@ -90,6 +191,7 @@ export const authService = {
         email: payload.email,
         phone: payload.phone,
         password: payload.password,
+        pin: payload.pin,
       });
 
       if (res && res.user && res.token) {
@@ -103,6 +205,8 @@ export const authService = {
           walletBalance: res.user.walletBalance ?? 0,
           status: res.user.status,
           virtualAccount: res.user.virtualAccount,
+          pin: res.user.pin || payload.pin || '123456',
+          hasPin: true,
           createdAt: res.user.createdAt,
           updatedAt: res.user.updatedAt,
         };

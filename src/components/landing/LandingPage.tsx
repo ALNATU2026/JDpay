@@ -29,6 +29,7 @@ import heroImage from '../../assets/images/hero_cable_lifestyle_1790193564568.jp
 import tvScreenImage from '../../assets/images/cable_tv_screen_1790193589235.jpg';
 import heroBgImage from '../../assets/images/hero_bg_cable_lounge_1790194777894.jpg';
 import jdpayLogoEmblem from '../../assets/images/jdpay_logo_emblem_1790194797870.jpg';
+import heroContentBg from '../../assets/images/hero_content_bg_1790418938323.jpg';
 
 interface LandingPageProps {
   onNavigate: (path: string) => void;
@@ -320,107 +321,125 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, currentUse
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            {/* Left Content Col */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* JDPay Brand Logo Header */}
-              <div className="inline-flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
+            {/* Left Content Col with Dedicated Background Image */}
+            <div className="lg:col-span-7 relative rounded-3xl overflow-hidden border border-white/20 shadow-2xl p-6 sm:p-8 md:p-10">
+              {/* Dedicated Background Image with Cinematic Gradient Overlays */}
+              <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
                 <img
-                  src={jdpayLogoEmblem}
-                  alt="JDpay Official Brand Logo"
-                  className="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow-sm"
+                  src={heroContentBg}
+                  alt="JDpay Cable TV Entertainment Background"
+                  className="w-full h-full object-cover object-center filter brightness-[0.34] contrast-[1.15] scale-105"
                   referrerPolicy="no-referrer"
                 />
-                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xl font-black tracking-tight text-white font-sans">
-                      JD<span className="text-blue-400">pay</span>
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                      Official
+                {/* Multi-layered atmospheric glass gradients ensuring 100% text clarity & WCAG AA contrast */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/95 via-slate-950/88 to-blue-950/70" />
+                <div className="absolute inset-0 bg-gradient-to-b from-slate-950/50 via-transparent to-slate-950/90" />
+                <div className="absolute -bottom-10 -right-10 w-72 h-72 bg-blue-600/25 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -top-10 -left-10 w-56 h-56 bg-cyan-500/15 rounded-full blur-2xl pointer-events-none" />
+              </div>
+
+              {/* Elevated Content */}
+              <div className="relative z-10 space-y-6">
+                {/* JDPay Brand Logo Header */}
+                <div className="inline-flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
+                  <img
+                    src={jdpayLogoEmblem}
+                    alt="JDpay Official Brand Logo"
+                    className="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xl font-black tracking-tight text-white font-sans">
+                        JD<span className="text-blue-400">pay</span>
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                        Official
+                      </span>
+                    </div>
+                    <span className="hidden sm:inline text-white/30">•</span>
+                    <span className="text-[11px] text-blue-200 font-medium">
+                      "Pay Your Cable TV. Simple. Fast. Secure."
                     </span>
                   </div>
-                  <span className="hidden sm:inline text-white/30">•</span>
-                  <span className="text-[11px] text-blue-200 font-medium">
-                    "Pay Your Cable TV. Simple. Fast. Secure."
-                  </span>
                 </div>
-              </div>
 
-              {/* Trust Tag */}
-              <div className="flex items-center gap-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-300 backdrop-blur-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Zero Transaction Fees on All Cable Subscriptions</span>
+                {/* Trust Tag */}
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-300 backdrop-blur-sm">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Zero Transaction Fees on All Cable Subscriptions</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Primary Headline */}
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.12]">
-                Pay Your Cable TV Subscription in Seconds
-              </h1>
+                {/* Primary Headline */}
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.15]">
+                  Pay Your Cable TV Subscription in Seconds
+                </h1>
 
-              {/* Supporting Copy */}
-              <p className="text-lg sm:text-xl text-slate-200 max-w-2xl font-normal leading-relaxed">
-                Renew your DStv, GOtv or StarTimes subscription quickly and securely from one convenient platform.
-              </p>
+                {/* Supporting Copy */}
+                <p className="text-base sm:text-lg text-slate-200 max-w-2xl font-normal leading-relaxed">
+                  Renew your DStv, GOtv or StarTimes subscription quickly and securely from one convenient platform.
+                </p>
 
-              {/* Action Buttons */}
-              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
-                <button
-                  onClick={() => onNavigate(currentUser ? '/dashboard/cable' : '/signup')}
-                  className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-600/30 whitespace-nowrap cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Tv className="w-4 h-4" />
-                  Pay Cable TV
-                </button>
+                {/* Action Buttons */}
+                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+                  <button
+                    onClick={() => onNavigate(currentUser ? '/dashboard/cable' : '/signup')}
+                    className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-600/30 whitespace-nowrap cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <Tv className="w-4 h-4" />
+                    Pay Cable TV
+                  </button>
+
+                  {!currentUser && (
+                    <button
+                      onClick={() => onNavigate('/signup')}
+                      className="inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 backdrop-blur-md transition-colors shadow-xs whitespace-nowrap cursor-pointer"
+                    >
+                      Create Free Account
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
 
                 {!currentUser && (
-                  <button
-                    onClick={() => onNavigate('/signup')}
-                    className="inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 backdrop-blur-md transition-colors shadow-xs whitespace-nowrap cursor-pointer"
-                  >
-                    Create Free Account
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-3 text-xs text-slate-300 pt-1">
+                    <span className="text-slate-400">Quick shortcuts:</span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/login')}
+                      className="font-bold text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      Log In
+                    </button>
+                    <span className="text-white/30">•</span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/signup')}
+                      className="font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Sign Up
+                    </button>
+                  </div>
                 )}
-              </div>
 
-              {!currentUser && (
-                <div className="flex items-center gap-3 text-xs text-slate-300 pt-1">
-                  <span className="text-slate-400">Quick shortcuts:</span>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('/login')}
-                    className="font-bold text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    Log In
-                  </button>
-                  <span className="text-white/30">•</span>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('/signup')}
-                    className="font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    Sign Up
-                  </button>
-                </div>
-              )}
-
-              {/* Trust Indicators */}
-              <div className="pt-6 border-t border-white/15 grid grid-cols-3 gap-4 text-left">
-                <div>
-                  <div className="text-2xl font-black text-white tabular-nums">Instant</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Switch Activation</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-emerald-400 tabular-nums">₦0.00</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Convenience Fee</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-blue-400 tabular-nums">24/7</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Automated Gateway</div>
+                {/* Trust Indicators */}
+                <div className="pt-6 border-t border-white/15 grid grid-cols-3 gap-4 text-left">
+                  <div>
+                    <div className="text-xl sm:text-2xl font-black text-white tabular-nums">Instant</div>
+                    <div className="text-xs text-slate-300 mt-0.5">Switch Activation</div>
+                  </div>
+                  <div>
+                    <div className="text-xl sm:text-2xl font-black text-emerald-400 tabular-nums">₦0.00</div>
+                    <div className="text-xs text-slate-300 mt-0.5">Convenience Fee</div>
+                  </div>
+                  <div>
+                    <div className="text-xl sm:text-2xl font-black text-blue-400 tabular-nums">24/7</div>
+                    <div className="text-xs text-slate-300 mt-0.5">Automated Gateway</div>
+                  </div>
                 </div>
               </div>
             </div>

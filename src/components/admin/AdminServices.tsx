@@ -129,7 +129,7 @@ export const AdminServices: React.FC<AdminServicesProps> = ({ adminUser }) => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-white/10 text-xs">
           <div>
             <span className="text-slate-400 block text-[11px]">Biller Account Email</span>
-            <span className="font-mono text-slate-100 font-semibold">{vtpassStatus?.email || 'sadjad578@gmail.com'}</span>
+            <span className="font-mono text-slate-100 font-semibold">{vtpassStatus?.email || 'Connected via Environment'}</span>
           </div>
           <div>
             <span className="text-slate-400 block text-[11px]">API Host</span>

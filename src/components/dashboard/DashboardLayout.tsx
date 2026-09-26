@@ -14,9 +14,11 @@ import {
   Shield,
   CreditCard,
   ChevronRight,
+  Lock,
 } from 'lucide-react';
 import { User } from '../../types';
 import { notificationService } from '../../services/notificationService';
+import { ThemeToggle } from '../common/ThemeToggle';
 
 interface DashboardLayoutProps {
   currentPath: string;
@@ -24,6 +26,7 @@ interface DashboardLayoutProps {
   currentUser: User;
   onLogout: () => void;
   onSwitchRole?: () => void;
+  onLockSession?: () => void;
   children: React.ReactNode;
 }
 
@@ -33,6 +36,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   currentUser,
   onLogout,
   onSwitchRole,
+  onLockSession,
   children,
 }) => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -60,14 +64,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row text-slate-900">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col md:flex-row text-slate-900 dark:text-slate-100 transition-colors">
       {/* ================= DESKTOP SIDEBAR ================= */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 border-r border-slate-800 shrink-0 select-none">
+      <aside className="hidden md:flex flex-col w-64 bg-slate-900 dark:bg-slate-950 text-slate-300 border-r border-slate-800 shrink-0 select-none">
         {/* Brand Header */}
         <div className="h-18 px-6 flex items-center justify-between border-b border-slate-800/80">
           <button
             onClick={() => handleNav('/dashboard')}
-            className="flex items-center gap-2.5 focus:outline-hidden group"
+            className="flex items-center gap-2.5 focus:outline-hidden group cursor-pointer"
           >
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
               JD
@@ -106,7 +110,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               <button
                 key={item.label}
                 onClick={() => handleNav(item.path)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -128,10 +132,21 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Bottom Section */}
         <div className="p-3 border-t border-slate-800 space-y-1">
+          {onLockSession && (
+            <button
+              onClick={onLockSession}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/30 rounded-xl transition-colors cursor-pointer"
+              title="Lock Session with 6-digit PIN"
+            >
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span>Lock Session</span>
+            </button>
+          )}
+
           {onSwitchRole && (
             <button
               onClick={onSwitchRole}
-              className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-900/30 rounded-xl transition-colors"
+              className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-900/30 rounded-xl transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-purple-400" />
@@ -143,7 +158,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-rose-400 hover:bg-rose-950/30 rounded-xl transition-colors"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-rose-400 hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span>Logout</span>
@@ -154,43 +169,52 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* ================= MAIN CONTENT AREA ================= */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Navbar */}
-        <header className="h-18 bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-30 shadow-2xs">
+        <header className="h-18 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-30 shadow-2xs transition-colors">
           <div className="flex items-center gap-3">
             {/* Mobile menu trigger */}
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+              className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             >
               {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
             {/* Breadcrumb indicator */}
             <div className="hidden sm:block">
-              <span className="text-xs font-semibold text-slate-500">Customer Portal</span>
-              <span className="text-xs text-slate-300 mx-2">/</span>
-              <span className="text-xs font-bold text-slate-900 capitalize">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Customer Portal</span>
+              <span className="text-xs text-slate-300 dark:text-slate-600 mx-2">/</span>
+              <span className="text-xs font-bold text-slate-900 dark:text-white capitalize">
                 {currentPath.replace('/dashboard/', '').replace('/dashboard', 'Overview')}
               </span>
             </div>
           </div>
 
           {/* Right Header Controls */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            {/* Live MongoDB Status */}
-            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800" title="Connected to MongoDB Atlas: jdpay-cluster.ieezqvb.mongodb.net / jdpay">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>MongoDB Live</span>
-            </div>
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Lock Session quick button */}
+            {onLockSession && (
+              <button
+                type="button"
+                onClick={onLockSession}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                title="Lock Session (Require PIN to continue)"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Wallet quick balance button */}
             <button
               onClick={() => handleNav('/dashboard/fund-wallet')}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors shadow-2xs"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shadow-2xs cursor-pointer"
             >
-              <Wallet className="w-4 h-4 text-emerald-600" />
+              <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <div className="text-left">
-                <span className="hidden sm:inline text-[10px] text-emerald-600 block uppercase font-bold tracking-wider leading-none">
+                <span className="hidden sm:inline text-[10px] text-emerald-600 dark:text-emerald-400 block uppercase font-bold tracking-wider leading-none">
                   Wallet Balance
                 </span>
                 <span className="text-xs font-extrabold tabular-nums">
@@ -202,7 +226,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             {/* Notification bell */}
             <button
               onClick={() => handleNav('/dashboard/notifications')}
-              className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               title="Notifications"
             >
               <Bell className="w-5 h-5" />
@@ -217,12 +241,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             {/* Profile Avatar */}
             <button
               onClick={() => handleNav('/dashboard/profile')}
-              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                 {currentUser.fullName.charAt(0)}
               </div>
-              <span className="hidden lg:inline text-xs font-semibold text-slate-800 max-w-[120px] truncate">
+              <span className="hidden lg:inline text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-[120px] truncate">
                 {currentUser.fullName.split(' ')[0]}
               </span>
             </button>
@@ -231,7 +255,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Mobile Nav Drawer */}
         {isMobileNavOpen && (
-          <div className="md:hidden bg-slate-900 text-slate-300 px-4 py-4 space-y-1 border-b border-slate-800 shadow-xl">
+          <div className="md:hidden bg-slate-900 dark:bg-slate-950 text-slate-300 px-4 py-4 space-y-1 border-b border-slate-800 shadow-xl">
             {sidebarNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPath === item.path;
@@ -257,6 +281,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             })}
 
             <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+              {onLockSession && (
+                <button
+                  onClick={onLockSession}
+                  className="text-xs text-amber-300 font-semibold flex items-center gap-1.5 py-2 cursor-pointer"
+                >
+                  <Lock className="w-4 h-4" />
+                  Lock
+                </button>
+              )}
               {onSwitchRole && (
                 <button
                   onClick={onSwitchRole}
@@ -285,3 +318,4 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     </div>
   );
 };
+

@@ -5,7 +5,7 @@ dotenv.config();
 
 const rawUri =
   process.env.MONGODB_URI ||
-  'mongodb+srv://streaminglive171_db_user:0IuQuIHo3Bvw60di@jdpay-cluster.ieezqvb.mongodb.net/jdpay?retryWrites=true&w=majority';
+  'mongodb://127.0.0.1:27017/jdpay';
 const MONGODB_URI = rawUri.replace(/^["']|["']$/g, '').trim();
 
 let isConnected = false;
@@ -40,7 +40,7 @@ export function getDatabaseStatus() {
   return {
     state: states[mongoose.connection.readyState] || 'unknown',
     readyState: mongoose.connection.readyState,
-    host: mongoose.connection.host || 'jdpay-cluster.ieezqvb.mongodb.net',
+    host: mongoose.connection.host || 'MongoDB Atlas',
     dbName: mongoose.connection.name || 'jdpay',
   };
 }

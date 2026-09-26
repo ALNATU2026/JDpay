@@ -108,6 +108,46 @@ export const adminService = {
     };
   },
 
+  resetCustomerPin: async (customerId: string): Promise<{ success: boolean; defaultPin: string; message: string; customer: User }> => {
+    const res = await api.admin.resetCustomerPin(customerId);
+    const c = res.customer;
+    const mapped: User = {
+      ...c,
+      id: (c.id || c._id || '').toString(),
+    };
+    return {
+      success: res.success,
+      defaultPin: res.defaultPin,
+      message: res.message,
+      customer: mapped,
+    };
+  },
+
+  updateCustomer: async (
+    customerId: string,
+    data: {
+      fullName?: string;
+      email?: string;
+      phone?: string;
+      role?: string;
+      status?: string;
+      newPassword?: string;
+      pin?: string;
+    }
+  ): Promise<{ success: boolean; message: string; customer: User }> => {
+    const res = await api.admin.updateCustomer(customerId, data);
+    const c = res.customer;
+    const mapped: User = {
+      ...c,
+      id: (c.id || c._id || '').toString(),
+    };
+    return {
+      success: res.success,
+      message: res.message,
+      customer: mapped,
+    };
+  },
+
   adjustWallet: async (
     adminId: string,
     adminName: string,
